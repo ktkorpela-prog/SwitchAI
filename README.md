@@ -12,14 +12,17 @@ One person pays for the API keys. Everyone else joins free via an invite code. A
 
 - **Multi-model chat** — Claude, GPT-4, Gemini, and Mistral in the same thread
 - **@mention routing** — `@claude`, `@gpt4`, `@gemini`, `@mistral`, or `@everyone`
+- **Web search** — add `+web` to any message to fetch live results before the model replies (`@claude +web latest AI news`)
 - **Shared context** — all models read the same history; no re-explaining when you switch
 - **Friction sliders** — tune each model from "supportive" to "devil's advocate" (0–10)
-- **Streaming responses** with per-message token counts and a Stop button
+- **Streaming responses** with per-message input/output token counts and a Stop button
 - **File & image uploads** — drag-and-drop or paste from clipboard
 - **Reply threading** — quote any message when replying
 - **Persistent room memory** — `context.md` prepended to every model's system prompt
+- **Real-time member presence** — sidebar shows who is currently online (green) or offline (gray)
 - **Member management** — Owner can view all members and kick someone
 - **API key manager** — enter keys in-app; stored locally in `keys.local.json`, never shared
+- **Token-efficient context pipeline** — short/trivial prompts use minimal context automatically; hard limits prevent runaway costs
 - **Light / dark mode**
 - **Session persistence** — survives page refresh with correct role
 - **Reconnection UI** — auto-reconnects on network drop
@@ -81,6 +84,21 @@ No database. Everything is plain text files.
 
 ---
 
+## Web Search (`+web`)
+
+Add `+web` to any `@mention` message to fetch live search results before the model replies:
+
+```
+@claude +web what happened in the news today?
+@everyone +web latest developments in fusion energy
+```
+
+Results are fetched server-side via [Tavily](https://app.tavily.com) (free tier: 1,000 searches/month) and injected as context. The model sees them as provided information — it does not browse the web itself. Messages using `+web` show a blue **web** badge in chat.
+
+To enable, add `TAVILY_API_KEY` to your `.env`.
+
+---
+
 ## Adding Models
 
 Models are enabled by providing their API key — either in `.env` at startup or via **Manage API Keys** in the sidebar (Owner only). Keys are stored in `keys.local.json` on your machine and are never sent to other clients.
@@ -116,16 +134,38 @@ Every room has a `context.md` file — the shared brain. Everything in it is pre
 
 ---
 
+## Context & Token Limits
+
+SwitchAI automatically manages how much history is sent to each model:
+
+- **Minimal mode** — triggered for short or trivial prompts (greetings, yes/no, <30 chars). Sends the last 3 messages only with a 256-token output cap.
+- **Normal mode** — sends recent history up to `MAX_CONTEXT_TOKENS` (default 8,000), newest messages first, oldest dropped when the budget is full. Output capped at 1,024 tokens.
+- **Hard ceiling** — if estimated input exceeds `HARD_REQUEST_TOKEN_CEILING` (default 12,000), the request is rejected with an inline error rather than sending a runaway call.
+
+Token usage per message is shown as `input→output tok` on each AI response.
+
+---
+
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3000` | Server port |
-| `HISTORY_CONTEXT_LINES` | `50` | History blocks included in each model call |
-| `ANTHROPIC_API_KEY` | — | Claude |
-| `OPENAI_API_KEY` | — | GPT-4 |
-| `GOOGLE_GEMINI_API_KEY` | — | Gemini |
-| `MISTRAL_API_KEY` | — | Mistral |
+| `ROOM_SECRET` | — | Required. Random string for room auth |
+| `ANTHROPIC_API_KEY` | — | Enables `@claude` |
+| `OPENAI_API_KEY` | — | Enables `@gpt4` |
+| `GOOGLE_GEMINI_API_KEY` | — | Enables `@gemini` |
+| `MISTRAL_API_KEY` | — | Enables `@mistral` |
+| `TAVILY_API_KEY` | — | Enables `+web` search flag |
+| `MAX_CONTEXT_TOKENS` | `8000` | Max history tokens per request |
+| `MAX_RECENT_MESSAGES` | `30` | Max message blocks from history |
+| `MAX_CONTEXT_CHARS` | `32000` | Max chars from context.md |
+| `MAX_OUTPUT_TOKENS_DEFAULT` | `1024` | Output cap for normal prompts |
+| `MAX_OUTPUT_TOKENS_SHORT_REPLY` | `256` | Output cap for trivial prompts |
+| `MAX_OUTPUT_TOKENS_LONG_REPLY` | `4096` | Output cap for extended mode |
+| `LOW_CONTEXT_MESSAGE_CHAR_THRESHOLD` | `120` | Char length below which trivial patterns trigger minimal mode |
+| `HARD_REQUEST_TOKEN_CEILING` | `12000` | Absolute max tokens before request is rejected |
+| `ENABLE_TOKEN_DEBUG` | `false` | Log context decisions to server console |
 
 ---
 
@@ -134,18 +174,22 @@ Every room has a `context.md` file — the shared brain. Everything in it is pre
 ```
 SwitchAI/
 ├── server/
-│   ├── index.js           # Express + Socket.io entry point
-│   ├── keystore.js        # API key storage (keys.local.json)
+│   ├── index.js              # Express + Socket.io entry point
+│   ├── keystore.js           # API key storage (keys.local.json)
+│   ├── search.js             # Tavily web search (+web flag)
+│   ├── tokenizer.js          # Token estimation utility
+│   ├── promptClassifier.js   # Classifies prompts → minimal / normal mode
+│   ├── contextBuilder.js     # Layered context builder with budget enforcement
 │   ├── models/
-│   │   ├── router.js      # @mention parser, history builder, stream orchestration
+│   │   ├── router.js         # @mention parser, context pipeline, stream orchestration
 │   │   ├── claude.js
 │   │   ├── openai.js
 │   │   ├── gemini.js
 │   │   └── mistral.js
 │   └── routes/
-│       ├── rooms.js       # Room CRUD, history, members, context
-│       ├── files.js       # File upload/serve (Multer)
-│       └── keys.js        # API key management endpoints
+│       ├── rooms.js          # Room CRUD, history, members, context
+│       ├── files.js          # File upload/serve (Multer)
+│       └── keys.js           # API key management endpoints
 ├── client/
 │   └── src/
 │       ├── App.jsx
@@ -157,7 +201,7 @@ SwitchAI/
 │           ├── InputBar.jsx
 │           ├── TypingIndicator.jsx
 │           └── FrictionSlider.jsx
-└── .env                   # API keys (gitignored)
+└── .env                      # Local config (gitignored)
 ```
 
 ---

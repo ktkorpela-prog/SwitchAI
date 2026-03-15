@@ -1,0 +1,159 @@
+const express = require('express');
+const router = express.Router();
+const fs = require('fs');
+const path = require('path');
+
+const ROOMS_DIR = path.join(__dirname, '../rooms');
+
+function getRoomPath(roomId) {
+  return path.join(ROOMS_DIR, roomId);
+}
+
+function slugify(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// POST /api/rooms/create
+// Body: { roomName, username, inviteCode }
+router.post('/create', (req, res) => {
+  const { roomName, username, inviteCode } = req.body;
+  if (!roomName || !username || !inviteCode) {
+    return res.status(400).json({ error: 'roomName, username, and inviteCode are required' });
+  }
+
+  const roomId = slugify(roomName);
+  const roomPath = getRoomPath(roomId);
+
+  if (fs.existsSync(roomPath)) {
+    return res.status(409).json({ error: 'A room with that name already exists' });
+  }
+
+  // Create room directory structure
+  fs.mkdirSync(path.join(roomPath, 'uploads'), { recursive: true });
+
+  // history.md — append-only conversation log
+  fs.writeFileSync(path.join(roomPath, 'history.md'), '');
+
+  // context.md — persistent room memory
+  fs.writeFileSync(
+    path.join(roomPath, 'context.md'),
+    `# Room Context\nThis file is always included in every model's system prompt.\nEdit freely — it is your shared AI memory.\n\n## About this room\n${roomName}\n\n## Preferences\n\n## Ongoing projects\n`
+  );
+
+  // members.md — member list with roles
+  const now = new Date().toISOString();
+  fs.writeFileSync(
+    path.join(roomPath, 'members.md'),
+    `# Members\n\n| Username | Role | Joined |\n|----------|------|--------|\n| ${username} | Owner | ${now} |\n`
+  );
+
+  // settings.json — friction and model config
+  fs.writeFileSync(
+    path.join(roomPath, 'settings.json'),
+    JSON.stringify(
+      {
+        room_name: roomName,
+        invite_code: inviteCode,
+        friction: { claude: 5, gpt4: 5, gemini: 5, mistral: 5 },
+        models_enabled: getConfiguredModels()
+      },
+      null,
+      2
+    )
+  );
+
+  res.json({ roomId, roomName, inviteCode });
+});
+
+// POST /api/rooms/join
+// Body: { inviteCode, username }
+router.post('/join', (req, res) => {
+  const { inviteCode, username } = req.body;
+  if (!inviteCode || !username) {
+    return res.status(400).json({ error: 'inviteCode and username are required' });
+  }
+
+  const room = findRoomByInviteCode(inviteCode);
+  if (!room) {
+    return res.status(404).json({ error: 'Invalid invite code' });
+  }
+
+  // Append member to members.md
+  const membersPath = path.join(getRoomPath(room.roomId), 'members.md');
+  const now = new Date().toISOString();
+  fs.appendFileSync(membersPath, `| ${username} | Member | ${now} |\n`);
+
+  res.json({ roomId: room.roomId, roomName: room.settings.room_name });
+});
+
+// GET /api/rooms/:roomId/history
+router.get('/:roomId/history', (req, res) => {
+  const historyPath = path.join(getRoomPath(req.params.roomId), 'history.md');
+  if (!fs.existsSync(historyPath)) {
+    return res.status(404).json({ error: 'Room not found' });
+  }
+  res.send(fs.readFileSync(historyPath, 'utf8'));
+});
+
+// GET /api/rooms/:roomId/settings
+router.get('/:roomId/settings', (req, res) => {
+  const settingsPath = path.join(getRoomPath(req.params.roomId), 'settings.json');
+  if (!fs.existsSync(settingsPath)) {
+    return res.status(404).json({ error: 'Room not found' });
+  }
+  res.json(JSON.parse(fs.readFileSync(settingsPath, 'utf8')));
+});
+
+// PATCH /api/rooms/:roomId/settings
+router.patch('/:roomId/settings', (req, res) => {
+  const settingsPath = path.join(getRoomPath(req.params.roomId), 'settings.json');
+  if (!fs.existsSync(settingsPath)) {
+    return res.status(404).json({ error: 'Room not found' });
+  }
+  const current = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  const updated = { ...current, ...req.body };
+  fs.writeFileSync(settingsPath, JSON.stringify(updated, null, 2));
+  res.json(updated);
+});
+
+// GET /api/rooms/:roomId/context
+router.get('/:roomId/context', (req, res) => {
+  const contextPath = path.join(getRoomPath(req.params.roomId), 'context.md');
+  if (!fs.existsSync(contextPath)) {
+    return res.status(404).json({ error: 'Room not found' });
+  }
+  res.send(fs.readFileSync(contextPath, 'utf8'));
+});
+
+// PUT /api/rooms/:roomId/context
+router.put('/:roomId/context', (req, res) => {
+  const contextPath = path.join(getRoomPath(req.params.roomId), 'context.md');
+  if (!fs.existsSync(contextPath)) {
+    return res.status(404).json({ error: 'Room not found' });
+  }
+  fs.writeFileSync(contextPath, req.body.content || '');
+  res.json({ ok: true });
+});
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function findRoomByInviteCode(inviteCode) {
+  if (!fs.existsSync(ROOMS_DIR)) return null;
+  for (const roomId of fs.readdirSync(ROOMS_DIR)) {
+    const settingsPath = path.join(ROOMS_DIR, roomId, 'settings.json');
+    if (!fs.existsSync(settingsPath)) continue;
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    if (settings.invite_code === inviteCode) return { roomId, settings };
+  }
+  return null;
+}
+
+function getConfiguredModels() {
+  const models = [];
+  if (process.env.ANTHROPIC_API_KEY) models.push('claude');
+  if (process.env.OPENAI_API_KEY) models.push('gpt4');
+  if (process.env.GOOGLE_GEMINI_API_KEY) models.push('gemini');
+  if (process.env.MISTRAL_API_KEY) models.push('mistral');
+  return models;
+}
+
+module.exports = router;

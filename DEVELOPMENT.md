@@ -81,7 +81,7 @@ To reset a room, delete its folder and restart.
 | 1 — Core MVP       | ✅ Done   | Server, Socket.io, Claude, React UI, markdown persistence |
 | 2 — Multi-Model    | ✅ Done   | GPT-4, Gemini, Mistral, @everyone, friction slider |
 | 3 — Files & Memory | ✅ Done   | File upload UI, context.md editor, reply-to-message |
-| 4 — Polish         | 🔲 Later  | Light mode, reconnection, @mention autocomplete, onboarding |
+| 4 — Polish         | ✅ Done   | Light mode, reconnection, @mention autocomplete, onboarding |
 
 ### Web Search (`+web` flag)
 
@@ -99,7 +99,7 @@ Works with all models. The search runs server-side, results are injected as cont
 - [x] context.md editor in sidebar (Owner only)
 - [x] Reply-to-message (quoted preview in input bar and message thread)
 - [x] Member presence — show all users currently in the room in real time (green dot = online, gray = offline)
-- [ ] Light/dark mode toggle
+- [x] Light/dark mode toggle (sun/moon button in sidebar, CSS variable based)
 - [ ] Replace OpenAI API key — previous key was accidentally exposed, revoke at platform.openai.com/api-keys
 
 ---

@@ -105,10 +105,10 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme }) {
                     {model.name}
                   </span>
                 </div>
-                {isOwner && enabled && (
+                {isOwner && (
                   <FrictionSlider value={friction} onChange={(v) => handleFrictionChange(key, v)} color={model.color} />
                 )}
-                {!isOwner && enabled && (
+                {!isOwner && (
                   <p className="text-xs text-gray-500 ml-4">Friction: {friction}</p>
                 )}
               </div>

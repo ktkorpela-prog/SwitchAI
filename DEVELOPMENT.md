@@ -38,6 +38,8 @@ At least one API key is required for AI responses. Missing keys disable that mod
 - Google: aistudio.google.com
 - Mistral: console.mistral.ai
 
+**⚠️ OpenAI gotcha:** A ChatGPT Plus subscription does NOT include API access. They run on separate billing ledgers. You must enable billing at platform.openai.com/settings/billing before API calls will work. A 401 error is almost always this.
+
 ---
 
 ## How Rooms Work

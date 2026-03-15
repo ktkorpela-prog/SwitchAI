@@ -4,6 +4,7 @@ const claude = require('./claude');
 const openai = require('./openai');
 const gemini = require('./gemini');
 const mistral = require('./mistral');
+const webSearch = require('../search');
 
 const ROOMS_DIR = path.join(__dirname, '../rooms');
 
@@ -15,6 +16,7 @@ const MODEL_MAP = {
 };
 
 const MENTION_PATTERN = /^@(claude|gpt4|gemini|mistral|everyone)\b/i;
+const WEB_FLAG_PATTERN = /\+web\b/i;
 
 // Active stream controllers keyed by `${roomId}:${model}`
 const activeStreams = new Map();
@@ -25,6 +27,14 @@ function parseMention(text) {
   return {
     model: match[1].toLowerCase(),
     text: text.trim().slice(match[0].length).trim()
+  };
+}
+
+function parseWebFlag(text) {
+  const hasFlag = WEB_FLAG_PATTERN.test(text);
+  return {
+    web: hasFlag,
+    text: hasFlag ? text.replace(WEB_FLAG_PATTERN, '').trim() : text
   };
 }
 
@@ -91,8 +101,27 @@ async function handleMessage(payload, io) {
 
   appendToHistory(roomId, username, text);
 
-  const { model, text: cleanText } = parseMention(text);
+  const { model, text: afterMention } = parseMention(text);
   if (!model) return;
+
+  const { web: useWeb, text: cleanText } = parseWebFlag(afterMention);
+
+  // Run web search if +web flag present
+  let searchContext = '';
+  if (useWeb) {
+    if (!webSearch.isConfigured()) {
+      io.to(roomId).emit('system_message', {
+        text: 'Web search is not configured. Add BRAVE_API_KEY to .env to enable +web.'
+      });
+    } else {
+      try {
+        searchContext = await webSearch.search(cleanText);
+      } catch (err) {
+        console.error('[search] error:', err.message);
+        io.to(roomId).emit('system_message', { text: `Web search failed: ${err.message}` });
+      }
+    }
+  }
 
   const targets = model === 'everyone' ? getEnabledModels(roomId) : [model];
 
@@ -113,6 +142,10 @@ async function handleMessage(payload, io) {
     const systemPrompt = buildSystemPrompt(roomId, target, frictionLevel);
     const history = getHistoryMessages(roomId);
 
+    const userContent = searchContext
+      ? `${searchContext}\n\n---\n${cleanText}`
+      : cleanText;
+
     const controller = new AbortController();
     const streamKey = `${roomId}:${target}`;
     activeStreams.set(streamKey, controller);
@@ -121,7 +154,7 @@ async function handleMessage(payload, io) {
       let fullResponse = '';
 
       const result = await module.call(
-        [...history, { role: 'user', content: cleanText }],
+        [...history, { role: 'user', content: userContent }],
         systemPrompt,
         frictionLevel,
         (chunk) => {

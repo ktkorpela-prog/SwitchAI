@@ -13,6 +13,7 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
   const [keySaving, setKeySaving]           = useState({});
   const [tokenTotals, setTokenTotals]       = useState({});
   const [members, setMembers]               = useState([]);
+  const [onlineUsers, setOnlineUsers]       = useState(new Set());
 
   useEffect(() => {
     fetch(`/api/rooms/${session.roomId}/settings`)
@@ -28,9 +29,11 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
   useEffect(() => {
     socket.on('token_totals', setTokenTotals);
     socket.on('member_joined', () => fetchMembers());
+    socket.on('presence_update', ({ online }) => setOnlineUsers(new Set(online)));
     return () => {
       socket.off('token_totals', setTokenTotals);
       socket.off('member_joined');
+      socket.off('presence_update');
     };
   }, [socket]);
 
@@ -147,24 +150,30 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
               {isOwner && <span className="text-xs text-yellow-400">👑</span>}
             </div>
           ) : (
-            members.map((m) => (
-              <div key={m.username} className="flex items-center gap-2 mb-1 group">
-                <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
-                <span className="text-sm text-gray-200 flex-1 truncate">{m.username}</span>
-                {m.role === 'Owner' && <span className="text-xs text-yellow-400">👑</span>}
-                {isOwner && m.username !== session.username && m.role !== 'Owner' && (
-                  <button
-                    onClick={() => kickMember(m.username)}
-                    className="text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-                    title={`Kick ${m.username}`}
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            ))
+            members.map((m) => {
+              const isOnline = onlineUsers.has(m.username);
+              return (
+                <div key={m.username} className="flex items-center gap-2 mb-1 group">
+                  <div
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ${isOnline ? 'bg-green-500' : 'bg-gray-600'}`}
+                    title={isOnline ? 'Online' : 'Offline'}
+                  />
+                  <span className={`text-sm flex-1 truncate ${isOnline ? 'text-gray-200' : 'text-gray-500'}`}>{m.username}</span>
+                  {m.role === 'Owner' && <span className="text-xs text-yellow-400">👑</span>}
+                  {isOwner && m.username !== session.username && m.role !== 'Owner' && (
+                    <button
+                      onClick={() => kickMember(m.username)}
+                      className="text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                      title={`Kick ${m.username}`}
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
 

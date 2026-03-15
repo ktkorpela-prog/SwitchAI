@@ -32,6 +32,14 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
+// ─── Presence ─────────────────────────────────────────────────────────────────
+const roomPresence = new Map(); // roomId -> Set<username>
+
+function emitPresence(roomId) {
+  const online = roomPresence.has(roomId) ? [...roomPresence.get(roomId)] : [];
+  io.to(roomId).emit('presence_update', { online });
+}
+
 // ─── Socket.io ───────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
   console.log(`[socket] client connected: ${socket.id}`);
@@ -40,8 +48,11 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     socket.data.roomId = roomId;
     socket.data.username = username;
+    if (!roomPresence.has(roomId)) roomPresence.set(roomId, new Set());
+    roomPresence.get(roomId).add(username);
     io.to(roomId).emit('system_message', { text: `${username} joined the room` });
     io.to(roomId).emit('member_joined', { username });
+    emitPresence(roomId);
     console.log(`[room] ${username} joined ${roomId}`);
   });
 
@@ -75,7 +86,9 @@ io.on('connection', (socket) => {
         s.leave(roomId);
       }
     }
+    if (roomPresence.has(roomId)) roomPresence.get(roomId).delete(targetUsername);
     io.to(roomId).emit('system_message', { text: `${targetUsername} was removed from the room` });
+    emitPresence(roomId);
   });
 
   socket.on('member_joined', ({ roomId, username }) => {
@@ -83,6 +96,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    const { roomId, username } = socket.data;
+    if (roomId && username && roomPresence.has(roomId)) {
+      roomPresence.get(roomId).delete(username);
+      emitPresence(roomId);
+    }
     console.log(`[socket] client disconnected: ${socket.id}`);
   });
 });

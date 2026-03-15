@@ -106,6 +106,7 @@ export default function Message({ message, onReply, onStop }) {
   }
 
   // Human message
+  const hasWebSearch = /\+web\b/i.test(message.text || '');
   return (
     <div className="group flex items-start gap-3 py-2 px-3 rounded-lg hover:bg-surface transition-colors">
       <Avatar name={message.username} />
@@ -113,6 +114,11 @@ export default function Message({ message, onReply, onStop }) {
         <div className="flex items-baseline gap-2 mb-1">
           <span className="text-sm font-medium text-gray-100">{message.username}</span>
           <Timestamp ts={message.timestamp} />
+          {hasWebSearch && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-blue-900 text-blue-300 font-medium" title="Web search was used">
+              web
+            </span>
+          )}
           {onReply && (
             <button
               onClick={() => onReply(message)}

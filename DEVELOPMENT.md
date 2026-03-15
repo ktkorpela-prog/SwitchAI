@@ -29,6 +29,7 @@ npm run dev
 | `OPENAI_API_KEY`       | No       | Enables `@gpt4`                    |
 | `GOOGLE_GEMINI_API_KEY`| No       | Enables `@gemini`                  |
 | `MISTRAL_API_KEY`      | No       | Enables `@mistral`                 |
+| `TAVILY_API_KEY`       | No       | Enables `+web` search flag         |
 
 At least one API key is required for AI responses. Missing keys disable that model gracefully — they do not break the app.
 
@@ -82,6 +83,14 @@ To reset a room, delete its folder and restart.
 | 3 — Files & Memory | 🔲 Next   | File upload UI, context.md editor, reply-to-message |
 | 4 — Polish         | 🔲 Later  | Light mode, reconnection, @mention autocomplete, onboarding |
 
+### Web Search (`+web` flag)
+
+Add `TAVILY_API_KEY` to `.env` to enable. Get a free key at https://app.tavily.com (2000 queries/month free).
+
+Usage: `@claude +web what happened in the news today?`
+
+Works with all models. The search runs server-side, results are injected as context before the model call. Messages using `+web` show a blue `web` badge in chat.
+
 ---
 
 ## Known Issues / TODO
@@ -89,7 +98,7 @@ To reset a room, delete its folder and restart.
 - [ ] File upload UI wired on frontend (backend route exists, paperclip button is placeholder)
 - [ ] context.md editor in sidebar (backend route exists, UI not built)
 - [ ] Reply-to-message (quoted preview)
-- [ ] Member presence (sidebar shows current user only)
+- [x] Member presence — show all users currently in the room in real time (green dot = online, gray = offline)
 - [ ] Light/dark mode toggle
 - [ ] Replace OpenAI API key — previous key was accidentally exposed, revoke at platform.openai.com/api-keys
 

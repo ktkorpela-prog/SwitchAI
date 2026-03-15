@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { MODELS, MODEL_KEYS } from '../constants';
 import FrictionSlider from './FrictionSlider';
 
-export default function Sidebar({ session, socket }) {
-  const [settings, setSettings] = useState(null);
+export default function Sidebar({ session, socket, isDark, onToggleTheme }) {
+  const [settings, setSettings]             = useState(null);
   const [showContextEditor, setShowContextEditor] = useState(false);
-  const [contextText, setContextText] = useState('');
-  const [contextSaving, setContextSaving] = useState(false);
+  const [contextText, setContextText]       = useState('');
+  const [contextSaving, setContextSaving]   = useState(false);
 
   useEffect(() => {
     fetch(`/api/rooms/${session.roomId}/settings`)
@@ -31,31 +31,21 @@ export default function Sidebar({ session, socket }) {
     });
     setContextSaving(false);
     setShowContextEditor(false);
-    socket.emit('friction_change', {
+    socket.emit('system_message_local', {
       roomId: session.roomId,
-      model: 'context',
-      value: '',
-      username: session.username
+      text: `${session.username} updated room context`
     });
   }
 
   async function handleFrictionChange(model, value) {
-    const updated = {
-      ...settings,
-      friction: { ...settings.friction, [model]: value }
-    };
+    const updated = { ...settings, friction: { ...settings.friction, [model]: value } };
     setSettings(updated);
     await fetch(`/api/rooms/${session.roomId}/settings`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ friction: updated.friction })
     });
-    socket.emit('friction_change', {
-      roomId: session.roomId,
-      model,
-      value,
-      username: session.username
-    });
+    socket.emit('friction_change', { roomId: session.roomId, model, value, username: session.username });
   }
 
   const isOwner = session.role === 'Owner';
@@ -63,10 +53,31 @@ export default function Sidebar({ session, socket }) {
   return (
     <>
       <div className="w-60 flex-shrink-0 bg-surface border-r border-border flex flex-col overflow-y-auto">
-        {/* Room name */}
-        <div className="px-4 py-3 border-b border-border">
-          <h2 className="font-semibold text-white truncate">{session.roomName || settings?.room_name || 'Room'}</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{isOwner ? '👑 Owner' : 'Member'}</p>
+        {/* Room name + theme toggle */}
+        <div className="px-4 py-3 border-b border-border flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="font-semibold text-white truncate">{session.roomName || settings?.room_name || 'Room'}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{isOwner ? '👑 Owner' : 'Member'}</p>
+          </div>
+          <button
+            onClick={onToggleTheme}
+            className="text-gray-500 hover:text-gray-300 transition-colors flex-shrink-0 mt-0.5"
+            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {isDark ? (
+              // Sun icon
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 5a7 7 0 100 14A7 7 0 0012 5z" />
+              </svg>
+            ) : (
+              // Moon icon
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </svg>
+            )}
+          </button>
         </div>
 
         {/* Members */}
@@ -90,19 +101,12 @@ export default function Sidebar({ session, socket }) {
               <div key={key} className="mb-3">
                 <div className="flex items-center gap-2 mb-1">
                   <div className={`w-2 h-2 rounded-full ${enabled ? 'bg-green-500' : 'bg-gray-600'}`} />
-                  <span
-                    className="text-xs font-semibold px-1.5 py-0.5 rounded text-white"
-                    style={{ backgroundColor: model.color }}
-                  >
+                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: model.color }}>
                     {model.name}
                   </span>
                 </div>
                 {isOwner && enabled && (
-                  <FrictionSlider
-                    value={friction}
-                    onChange={(v) => handleFrictionChange(key, v)}
-                    color={model.color}
-                  />
+                  <FrictionSlider value={friction} onChange={(v) => handleFrictionChange(key, v)} color={model.color} />
                 )}
                 {!isOwner && enabled && (
                   <p className="text-xs text-gray-500 ml-4">Friction: {friction}</p>
@@ -112,7 +116,7 @@ export default function Sidebar({ session, socket }) {
           })}
         </div>
 
-        {/* Context editor button — Owner only */}
+        {/* Context editor button */}
         {isOwner && (
           <div className="px-4 py-3 border-t border-border mt-auto">
             <button
@@ -135,15 +139,10 @@ export default function Sidebar({ session, socket }) {
           <div className="bg-surface border border-border rounded-lg w-full max-w-lg mx-4 flex flex-col" style={{ maxHeight: '80vh' }}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <h3 className="font-semibold text-white text-sm">Room Context (context.md)</h3>
-              <button
-                onClick={() => setShowContextEditor(false)}
-                className="text-gray-500 hover:text-gray-300 text-lg leading-none"
-              >
-                ✕
-              </button>
+              <button onClick={() => setShowContextEditor(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
             </div>
             <p className="px-4 pt-3 text-xs text-gray-500">
-              This is prepended to every model's system prompt. Write anything — preferences, ongoing projects, house rules.
+              Prepended to every model's system prompt. Write preferences, ongoing projects, house rules.
             </p>
             <textarea
               className="flex-1 m-4 bg-surface-raised border border-border rounded p-3 text-sm text-gray-100 font-mono resize-none focus:outline-none focus:border-accent"

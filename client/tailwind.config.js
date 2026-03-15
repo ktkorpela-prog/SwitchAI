@@ -5,17 +5,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        // SwitchAI design palette
-        bg: '#0F1117',
-        surface: '#1A1B23',
-        'surface-raised': '#22243A',
-        accent: '#1A56DB',
-        'ai-bg': '#1E2235',
-        border: '#2D2F45',
-        // Model badge colours
-        claude: '#7C3AED',
-        gpt4: '#059669',
-        gemini: '#D97706',
+        // CSS-variable backed — update automatically on theme toggle
+        bg:               'var(--color-bg)',
+        surface:          'var(--color-surface)',
+        'surface-raised': 'var(--color-surface-raised)',
+        'ai-bg':          'var(--color-ai-bg)',
+        border:           'var(--color-border)',
+        // Static accent + model badges
+        accent:  '#1A56DB',
+        claude:  '#7C3AED',
+        gpt4:    '#059669',
+        gemini:  '#D97706',
         mistral: '#DB2777'
       },
       fontFamily: {
@@ -23,9 +23,9 @@ export default {
         mono: ['JetBrains Mono', 'Fira Code', 'monospace']
       },
       fontSize: {
-        message: '0.875rem',   // 14px
-        sidebar: '0.75rem',    // 12px
-        timestamp: '0.6875rem' // 11px
+        message:   '0.875rem',
+        sidebar:   '0.75rem',
+        timestamp: '0.6875rem'
       }
     }
   },

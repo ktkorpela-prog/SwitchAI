@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import Onboarding from './components/Onboarding';
 import ChatWindow from './components/ChatWindow';
@@ -6,15 +6,44 @@ import Sidebar from './components/Sidebar';
 
 const socket = io();
 
+// ─── Theme ────────────────────────────────────────────────────────────────────
+function initTheme() {
+  const saved = localStorage.getItem('switchai-theme');
+  const isDark = saved ? saved === 'dark' : true; // dark by default
+  document.documentElement.classList.toggle('dark', isDark);
+  return isDark;
+}
+
 export default function App() {
-  const [session, setSession] = useState(null); // { roomId, roomName, username, role }
-  const [messages, setMessages] = useState([]);
+  const [session, setSession]           = useState(null);
+  const [messages, setMessages]         = useState([]);
   const [typingModels, setTypingModels] = useState([]);
-  const [connected, setConnected] = useState(true);
+  const [connected, setConnected]       = useState(true);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [justReconnected, setJustReconnected] = useState(false);
+  const [isDark, setIsDark]             = useState(initTheme);
+
+  function toggleTheme() {
+    const next = !isDark;
+    setIsDark(next);
+    document.documentElement.classList.toggle('dark', next);
+    localStorage.setItem('switchai-theme', next ? 'dark' : 'light');
+  }
 
   useEffect(() => {
-    socket.on('connect', () => setConnected(true));
-    socket.on('disconnect', () => setConnected(false));
+    socket.on('connect', () => {
+      setConnected(true);
+      if (reconnecting) {
+        setReconnecting(false);
+        setJustReconnected(true);
+        setTimeout(() => setJustReconnected(false), 2500);
+      }
+    });
+
+    socket.on('disconnect', () => {
+      setConnected(false);
+      setReconnecting(true);
+    });
 
     socket.on('new_message', (msg) => {
       setMessages((prev) => [...prev, { ...msg, type: 'human' }]);
@@ -39,7 +68,7 @@ export default function App() {
       });
     });
 
-    socket.on('model_response', ({ model, text, timestamp }) => {
+    socket.on('model_response', ({ model, timestamp }) => {
       setMessages((prev) => {
         const idx = [...prev].reverse().findIndex((m) => m.type === 'ai' && m.model === model && m.streaming);
         if (idx === -1) return prev;
@@ -57,7 +86,7 @@ export default function App() {
     });
 
     return () => socket.off();
-  }, []);
+  }, [reconnecting]);
 
   function handleJoin({ roomId, roomName, username, role }) {
     setSession({ roomId, roomName, username, role });
@@ -85,12 +114,25 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-bg overflow-hidden">
+      {/* Disconnected banner */}
       {!connected && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-yellow-800 text-yellow-100 text-sm text-center py-1">
+        <div className="fixed top-0 left-0 right-0 z-50 bg-yellow-800 text-yellow-100 text-sm text-center py-1.5 flex items-center justify-center gap-2">
+          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
           Reconnecting...
         </div>
       )}
-      <Sidebar session={session} socket={socket} />
+
+      {/* Reconnected toast */}
+      {justReconnected && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-green-700 text-green-100 text-sm text-center py-1.5">
+          Reconnected ✓
+        </div>
+      )}
+
+      <Sidebar session={session} socket={socket} isDark={isDark} onToggleTheme={toggleTheme} />
       <ChatWindow
         messages={messages}
         typingModels={typingModels}

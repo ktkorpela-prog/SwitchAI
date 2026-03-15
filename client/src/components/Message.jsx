@@ -60,7 +60,7 @@ export default function Message({ message, onReply }) {
     return (
       <div
         className="group flex items-start gap-3 py-2 px-3 rounded-lg border-l-[3px]"
-        style={{ backgroundColor: '#1E2235', borderColor: model.color }}
+        style={{ backgroundColor: 'var(--color-ai-bg)', borderColor: model.color }}
       >
         <Avatar name={model.name} color={model.color} />
         <div className="flex-1 min-w-0">

@@ -2,13 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Theme colour variables ─────────────────────────────────────────────── */
+:root {
+  /* Light mode defaults */
+  --color-bg:            #F3F4F6;
+  --color-surface:       #FFFFFF;
+  --color-surface-raised:#F9FAFB;
+  --color-ai-bg:         #EEF2FF;
+  --color-border:        #E5E7EB;
+}
+
+html.dark {
+  --color-bg:            #0F1117;
+  --color-surface:       #1A1B23;
+  --color-surface-raised:#22243A;
+  --color-ai-bg:         #1E2235;
+  --color-border:        #2D2F45;
+}
+
+/* ─── Text colour flipping in light mode ─────────────────────────────────── */
+html:not(.dark) .text-gray-100 { color: #111827 !important; }
+html:not(.dark) .text-gray-200 { color: #1F2937 !important; }
+html:not(.dark) .text-gray-300 { color: #374151 !important; }
+html:not(.dark) .text-gray-400 { color: #4B5563 !important; }
+html:not(.dark) .text-gray-500 { color: #6B7280 !important; }
+html:not(.dark) .text-white    { color: #111827 !important; }
+
+/* placeholder text */
+html:not(.dark) .placeholder-gray-500::placeholder { color: #9CA3AF; }
+
+/* ─── Base ───────────────────────────────────────────────────────────────── */
 @layer base {
   body {
-    background-color: #0F1117;
+    background-color: var(--color-bg);
     color: #F9FAFB;
   }
+  html:not(.dark) body { color: #111827; }
+
   * {
     scrollbar-width: thin;
-    scrollbar-color: #2D2F45 #1A1B23;
+    scrollbar-color: var(--color-border) var(--color-surface);
   }
 }

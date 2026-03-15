@@ -4,15 +4,39 @@ import { MODEL_KEYS, MODELS } from '../constants';
 const MAX_CHARS = 4000;
 
 export default function InputBar({ session, onSend, replyTo, onClearReply }) {
-  const [text, setText] = useState('');
-  const [showPicker, setShowPicker] = useState(false);
+  const [text, setText]               = useState('');
+  const [showPicker, setShowPicker]   = useState(false);
   const [pickerFilter, setPickerFilter] = useState('');
-  const [uploading, setUploading] = useState(false);
+  const [pickerIndex, setPickerIndex] = useState(0);
+  const [uploading, setUploading]     = useState(false);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  const filteredModels = MODEL_KEYS.filter((k) => k.startsWith(pickerFilter));
+  const pickerOptions = [
+    ...filteredModels,
+    ...('everyone'.startsWith(pickerFilter) && pickerFilter !== '' ? ['everyone'] : pickerFilter === '' ? ['everyone'] : [])
+  ];
+
   function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (showPicker && pickerOptions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setPickerIndex((i) => (i + 1) % pickerOptions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setPickerIndex((i) => (i - 1 + pickerOptions.length) % pickerOptions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        insertMention(pickerOptions[pickerIndex]);
+        return;
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !showPicker) {
       e.preventDefault();
       submit();
     }
@@ -28,6 +52,7 @@ export default function InputBar({ session, onSend, replyTo, onClearReply }) {
     const match = val.match(/@(\w*)$/);
     if (match) {
       setPickerFilter(match[1].toLowerCase());
+      setPickerIndex(0);
       setShowPicker(true);
     } else {
       setShowPicker(false);
@@ -67,7 +92,6 @@ export default function InputBar({ session, onSend, replyTo, onClearReply }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      // Send as a regular message so it goes through history + socket broadcast
       const isImage = file.type.startsWith('image/');
       const msgText = isImage
         ? `![${data.originalname}](${data.url})`
@@ -80,34 +104,34 @@ export default function InputBar({ session, onSend, replyTo, onClearReply }) {
     }
   }
 
-  const filteredModels = MODEL_KEYS.filter((k) => k.startsWith(pickerFilter));
-  const pickerOptions = [
-    ...filteredModels,
-    ...('everyone'.startsWith(pickerFilter) ? ['everyone'] : [])
-  ];
-
   return (
     <div className="relative px-4 pb-4">
       {/* Model picker dropdown */}
       {showPicker && pickerOptions.length > 0 && (
         <div className="absolute bottom-full mb-1 left-4 bg-surface-raised border border-border rounded-lg shadow-lg overflow-hidden z-10">
-          {pickerOptions.map((key) => {
+          {pickerOptions.map((key, i) => {
             const model = MODELS[key];
             return (
               <button
                 key={key}
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-200 hover:bg-border transition-colors text-left"
+                className={`flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-200 transition-colors text-left ${
+                  i === pickerIndex ? 'bg-border' : 'hover:bg-border'
+                }`}
                 onMouseDown={() => insertMention(key)}
+                onMouseEnter={() => setPickerIndex(i)}
               >
                 {model ? (
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: model.color }} />
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: model.color }} />
                 ) : (
-                  <span className="w-2 h-2 rounded-full bg-gray-400" />
+                  <span className="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0" />
                 )}
                 <span>{key === 'everyone' ? '@everyone — all models' : `@${key} — ${model?.name}`}</span>
               </button>
             );
           })}
+          <div className="px-3 py-1 border-t border-border">
+            <span className="text-gray-500" style={{ fontSize: '0.6rem' }}>↑↓ navigate · Enter select · Esc close</span>
+          </div>
         </div>
       )}
 
@@ -121,17 +145,11 @@ export default function InputBar({ session, onSend, replyTo, onClearReply }) {
               {replyTo.text?.length > 80 ? '...' : ''}
             </span>
           </div>
-          <button
-            onClick={onClearReply}
-            className="text-gray-500 hover:text-gray-300 flex-shrink-0"
-          >
-            ✕
-          </button>
+          <button onClick={onClearReply} className="text-gray-500 hover:text-gray-300 flex-shrink-0">✕</button>
         </div>
       )}
 
       <div className="flex items-end gap-2 bg-surface-raised border border-border rounded-lg px-3 py-2">
-        {/* Hidden file input */}
         <input
           ref={fileInputRef}
           type="file"
@@ -140,7 +158,6 @@ export default function InputBar({ session, onSend, replyTo, onClearReply }) {
           onChange={handleFileSelect}
         />
 
-        {/* Paperclip */}
         <button
           className={`pb-1 transition-colors ${uploading ? 'text-accent animate-pulse' : 'text-gray-500 hover:text-gray-300'}`}
           title="Upload file"
@@ -153,7 +170,6 @@ export default function InputBar({ session, onSend, replyTo, onClearReply }) {
           </svg>
         </button>
 
-        {/* Textarea */}
         <textarea
           ref={textareaRef}
           className="flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-500 resize-none focus:outline-none min-h-[24px] max-h-40"
@@ -165,14 +181,12 @@ export default function InputBar({ session, onSend, replyTo, onClearReply }) {
           style={{ lineHeight: '1.5' }}
         />
 
-        {/* Char count warning */}
         {text.length > MAX_CHARS - 200 && (
           <span className={`text-xs pb-1 ${text.length >= MAX_CHARS ? 'text-red-400' : 'text-yellow-500'}`}>
             {MAX_CHARS - text.length}
           </span>
         )}
 
-        {/* Send button */}
         <button
           onClick={submit}
           disabled={!text.trim()}

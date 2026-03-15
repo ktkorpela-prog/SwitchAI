@@ -3,7 +3,7 @@ import Message from './Message';
 import InputBar from './InputBar';
 import TypingIndicator from './TypingIndicator';
 
-export default function ChatWindow({ messages, typingModels, session, onSend }) {
+export default function ChatWindow({ messages, typingModels, session, onSend, onStop, onClear }) {
   const bottomRef = useRef(null);
   const dropZoneRef = useRef(null);
   const [replyTo, setReplyTo] = useState(null);
@@ -13,26 +13,18 @@ export default function ChatWindow({ messages, typingModels, session, onSend }) 
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, typingModels]);
 
-  // Drag-and-drop file upload
   useEffect(() => {
     const el = dropZoneRef.current;
     if (!el) return;
 
-    function onDragOver(e) {
-      e.preventDefault();
-      setDragging(true);
-    }
-    function onDragLeave(e) {
-      if (!el.contains(e.relatedTarget)) setDragging(false);
-    }
+    function onDragOver(e) { e.preventDefault(); setDragging(true); }
+    function onDragLeave(e) { if (!el.contains(e.relatedTarget)) setDragging(false); }
     async function onDrop(e) {
       e.preventDefault();
       setDragging(false);
       const file = e.dataTransfer.files?.[0];
       if (!file) return;
-      // Delegate to the same upload logic via a synthetic event on the hidden input
-      // Instead, emit directly
-      uploadDroppedFile(file);
+      await uploadDroppedFile(file);
     }
 
     el.addEventListener('dragover', onDragOver);
@@ -49,17 +41,11 @@ export default function ChatWindow({ messages, typingModels, session, onSend }) 
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`/api/files/${session.roomId}/upload`, {
-        method: 'POST',
-        body: formData
-      });
+      const res = await fetch(`/api/files/${session.roomId}/upload`, { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       const isImage = file.type.startsWith('image/');
-      const msgText = isImage
-        ? `![${data.originalname}](${data.url})`
-        : `📎 [${data.originalname}](${data.url})`;
-      onSend(msgText, null);
+      onSend(isImage ? `![${data.originalname}](${data.url})` : `📎 [${data.originalname}](${data.url})`, null);
     } catch (err) {
       onSend(`⚠️ Upload failed: ${err.message}`, null);
     }
@@ -79,6 +65,22 @@ export default function ChatWindow({ messages, typingModels, session, onSend }) 
         </div>
       )}
 
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-surface flex-shrink-0">
+        <span className="text-sm font-medium text-gray-200"># {session.roomName}</span>
+        <button
+          onClick={onClear}
+          className="text-xs text-gray-500 hover:text-red-400 transition-colors flex items-center gap-1"
+          title="Clear chat view for everyone"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          Clear view
+        </button>
+      </div>
+
       {/* Thread */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
         {messages.map((msg, i) => (
@@ -87,10 +89,11 @@ export default function ChatWindow({ messages, typingModels, session, onSend }) 
             message={msg}
             currentUser={session.username}
             onReply={setReplyTo}
+            onStop={onStop}
           />
         ))}
         {typingModels.map((model) => (
-          <TypingIndicator key={model} model={model} />
+          <TypingIndicator key={model} model={model} onStop={onStop} />
         ))}
         <div ref={bottomRef} />
       </div>

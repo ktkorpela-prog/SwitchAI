@@ -7,7 +7,6 @@ const mistral = require('./mistral');
 
 const ROOMS_DIR = path.join(__dirname, '../rooms');
 
-// Map @mention aliases to model modules
 const MODEL_MAP = {
   claude: claude,
   gpt4: openai,
@@ -17,10 +16,9 @@ const MODEL_MAP = {
 
 const MENTION_PATTERN = /^@(claude|gpt4|gemini|mistral|everyone)\b/i;
 
-/**
- * Parse a message for a leading @mention.
- * Returns { model: 'claude'|'gpt4'|...|'everyone'|null, text: string }
- */
+// Active stream controllers keyed by `${roomId}:${model}`
+const activeStreams = new Map();
+
 function parseMention(text) {
   const match = text.trim().match(MENTION_PATTERN);
   if (!match) return { model: null, text };
@@ -30,31 +28,20 @@ function parseMention(text) {
   };
 }
 
-/**
- * Build the system prompt for a model call:
- * context.md + friction modifier
- */
 function buildSystemPrompt(roomId, modelName, frictionLevel) {
   const contextPath = path.join(ROOMS_DIR, roomId, 'context.md');
   const context = fs.existsSync(contextPath)
     ? fs.readFileSync(contextPath, 'utf8')
     : '';
-
-  const frictionModifier = getFrictionModifier(frictionLevel);
-  return `${context}\n\n---\n${frictionModifier}`;
+  return `${context}\n\n---\n${getFrictionModifier(frictionLevel)}`;
 }
 
-/**
- * Get the last N lines from history.md as context messages.
- */
 function getHistoryMessages(roomId) {
   const historyPath = path.join(ROOMS_DIR, roomId, 'history.md');
   if (!fs.existsSync(historyPath)) return [];
 
   const raw = fs.readFileSync(historyPath, 'utf8');
   const limit = parseInt(process.env.HISTORY_CONTEXT_LINES || '50', 10);
-
-  // Split into message blocks (separated by ## headings)
   const blocks = raw.split(/\n(?=## )/).filter(Boolean);
   const recent = blocks.slice(-limit);
 
@@ -62,16 +49,10 @@ function getHistoryMessages(roomId) {
     const firstLine = block.split('\n')[0];
     const isAI = /\|\s*(Claude|GPT-4|Gemini|Mistral)/i.test(firstLine);
     const content = block.split('\n').slice(1).join('\n').trim();
-    return {
-      role: isAI ? 'assistant' : 'user',
-      content: content || block
-    };
+    return { role: isAI ? 'assistant' : 'user', content: content || block };
   });
 }
 
-/**
- * Append a message entry to history.md
- */
 function appendToHistory(roomId, author, content, meta = '') {
   const historyPath = path.join(ROOMS_DIR, roomId, 'history.md');
   const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
@@ -80,9 +61,6 @@ function appendToHistory(roomId, author, content, meta = '') {
   fs.appendFileSync(historyPath, entry);
 }
 
-/**
- * Get friction level for a model from settings.json
- */
 function getFrictionLevel(roomId, modelName) {
   const settingsPath = path.join(ROOMS_DIR, roomId, 'settings.json');
   if (!fs.existsSync(settingsPath)) return 5;
@@ -91,24 +69,30 @@ function getFrictionLevel(roomId, modelName) {
 }
 
 function getFrictionModifier(level) {
-  if (level <= 1) return 'Be warm, encouraging, and focus on strengths. Support the user\'s ideas.';
+  if (level <= 1) return "Be warm, encouraging, and focus on strengths. Support the user's ideas.";
   if (level <= 3) return 'Be kind and balanced. Offer honest feedback gently, with alternatives where helpful.';
   if (level <= 6) return 'Be direct and balanced. Answer questions honestly without bias.';
   if (level <= 8) return 'Note assumptions, ask clarifying questions, and offer alternative perspectives.';
-  return 'Challenge all assumptions. Point out flaws. Do not simply agree with the user. Play devil\'s advocate constructively.';
+  return "Challenge all assumptions. Point out flaws. Do not simply agree with the user. Play devil's advocate constructively.";
 }
 
-/**
- * Main message handler — called from socket.io on 'send_message'
- */
-async function handleMessage(payload, io) {
-  const { roomId, username, text, timestamp } = payload;
+/** Stop an active stream for a model in a room */
+function stopModel(roomId, model) {
+  const key = `${roomId}:${model}`;
+  const controller = activeStreams.get(key);
+  if (controller) {
+    controller.abort();
+    activeStreams.delete(key);
+  }
+}
 
-  // Append human message to history
+async function handleMessage(payload, io) {
+  const { roomId, username, text } = payload;
+
   appendToHistory(roomId, username, text);
 
   const { model, text: cleanText } = parseMention(text);
-  if (!model) return; // No @mention — nothing to route
+  if (!model) return;
 
   const targets = model === 'everyone' ? getEnabledModels(roomId) : [model];
 
@@ -118,51 +102,63 @@ async function handleMessage(payload, io) {
     if (!module.isConfigured()) {
       io.to(roomId).emit('model_error', {
         model: target,
-        error: `@${target} is not configured. Add the API key to your .env file.`
+        error: `@${target} is not configured. Add the API key in Manage API keys.`
       });
       continue;
     }
 
-    // Emit typing indicator
     io.to(roomId).emit('model_typing', { model: target });
 
     const frictionLevel = getFrictionLevel(roomId, target);
     const systemPrompt = buildSystemPrompt(roomId, target, frictionLevel);
     const history = getHistoryMessages(roomId);
 
+    const controller = new AbortController();
+    const streamKey = `${roomId}:${target}`;
+    activeStreams.set(streamKey, controller);
+
     try {
       let fullResponse = '';
 
-      await module.call(
+      const result = await module.call(
         [...history, { role: 'user', content: cleanText }],
         systemPrompt,
         frictionLevel,
         (chunk) => {
           fullResponse += chunk;
           io.to(roomId).emit('model_chunk', { model: target, chunk });
-        }
+        },
+        controller.signal
       );
 
-      // Emit complete response
+      const tokens = result?.tokens || 0;
+      const interrupted = controller.signal.aborted;
+
       io.to(roomId).emit('model_response', {
         model: target,
         text: fullResponse,
+        tokens,
+        interrupted,
         timestamp: new Date().toISOString()
       });
 
-      // Append AI response to history
-      const displayName = { claude: 'Claude', gpt4: 'GPT-4', gemini: 'Gemini', mistral: 'Mistral' }[target];
-      appendToHistory(roomId, displayName, fullResponse, `model: ${target}`);
+      if (fullResponse) {
+        const displayName = { claude: 'Claude', gpt4: 'GPT-4', gemini: 'Gemini', mistral: 'Mistral' }[target];
+        const meta = `model: ${target} | tokens: ${tokens}${interrupted ? ' | interrupted' : ''}`;
+        appendToHistory(roomId, displayName, fullResponse, meta);
+      }
     } catch (err) {
-      console.error(`[model:${target}] error:`, err.message);
-      io.to(roomId).emit('model_error', { model: target, error: err.message });
+      if (!controller.signal.aborted) {
+        console.error(`[model:${target}] error:`, err.message);
+        io.to(roomId).emit('model_error', { model: target, error: err.message });
+      }
+    } finally {
+      activeStreams.delete(streamKey);
     }
   }
 }
 
 function getEnabledModels(roomId) {
-  // @everyone targets all models that currently have a key configured.
-  // models_enabled in settings.json can explicitly exclude a model even if it has a key.
   const settingsPath = path.join(ROOMS_DIR, roomId, 'settings.json');
   const settings = fs.existsSync(settingsPath)
     ? JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
@@ -173,4 +169,4 @@ function getEnabledModels(roomId) {
   );
 }
 
-module.exports = { handleMessage, parseMention };
+module.exports = { handleMessage, parseMention, stopModel };

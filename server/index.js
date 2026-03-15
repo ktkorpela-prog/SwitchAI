@@ -7,7 +7,7 @@ const path = require('path');
 const roomsRouter = require('./routes/rooms');
 const filesRouter = require('./routes/files');
 const keysRouter  = require('./routes/keys');
-const { handleMessage } = require('./models/router');
+const { handleMessage, stopModel } = require('./models/router');
 const keystore = require('./keystore');
 
 const app = express();
@@ -56,6 +56,14 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('system_message', {
       text: `${model} friction set to ${value} by ${username}`
     });
+  });
+
+  socket.on('stop_model', ({ roomId, model }) => {
+    stopModel(roomId, model);
+  });
+
+  socket.on('clear_messages', ({ roomId, username }) => {
+    io.to(roomId).emit('messages_cleared', { username });
   });
 
   socket.on('disconnect', () => {

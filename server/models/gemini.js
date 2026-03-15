@@ -5,7 +5,7 @@ function isConfigured() {
   return !!keystore.getKey('gemini');
 }
 
-async function call(messages, systemPrompt, frictionLevel, onChunk) {
+async function call(messages, systemPrompt, frictionLevel, onChunk, signal) {
   const client = new GoogleGenerativeAI(keystore.getKey('gemini'));
   const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-pro';
   const model = client.getGenerativeModel({ model: modelName, systemInstruction: systemPrompt });
@@ -20,8 +20,17 @@ async function call(messages, systemPrompt, frictionLevel, onChunk) {
   const result = await chat.sendMessageStream(lastMessage.content);
 
   for await (const chunk of result.stream) {
+    if (signal?.aborted) break;
     const text = chunk.text();
     if (text) onChunk(text);
+  }
+
+  try {
+    const response = await result.response;
+    const tokens = response.usageMetadata?.totalTokenCount || 0;
+    return { tokens };
+  } catch {
+    return { tokens: 0 };
   }
 }
 

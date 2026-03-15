@@ -86,16 +86,20 @@ export default function App() {
       });
     });
 
-    socket.on('model_response', ({ model, timestamp }) => {
+    socket.on('model_response', ({ model, tokens, interrupted, timestamp }) => {
       setMessages((prev) => {
         const idx = [...prev].reverse().findIndex((m) => m.type === 'ai' && m.model === model && m.streaming);
         if (idx === -1) return prev;
         const realIdx = prev.length - 1 - idx;
         const updated = [...prev];
-        updated[realIdx] = { ...updated[realIdx], streaming: false, timestamp };
+        updated[realIdx] = { ...updated[realIdx], streaming: false, tokens, interrupted, timestamp };
         return updated;
       });
       setTypingModels((t) => t.filter((m) => m !== model));
+    });
+
+    socket.on('messages_cleared', ({ username }) => {
+      setMessages([{ type: 'system', text: `${username} cleared the chat view`, id: Date.now() }]);
     });
 
     socket.on('model_error', ({ model, error }) => {
@@ -127,6 +131,14 @@ export default function App() {
     clearSession();
     setSession(null);
     setMessages([]);
+  }
+
+  function stopModel(model) {
+    socket.emit('stop_model', { roomId: session.roomId, model });
+  }
+
+  function clearMessages() {
+    socket.emit('clear_messages', { roomId: session.roomId, username: session.username });
   }
 
   function sendMessage(text, replyTo) {
@@ -174,6 +186,8 @@ export default function App() {
         typingModels={typingModels}
         session={session}
         onSend={sendMessage}
+        onStop={stopModel}
+        onClear={clearMessages}
       />
     </div>
   );

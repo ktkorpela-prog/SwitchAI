@@ -34,7 +34,7 @@ function QuotedReply({ replyTo }) {
   );
 }
 
-export default function Message({ message, onReply }) {
+export default function Message({ message, onReply, onStop }) {
   if (message.type === 'system') {
     return (
       <div className="text-center text-xs text-gray-500 py-1">
@@ -72,8 +72,19 @@ export default function Message({ message, onReply }) {
               {model.name}
             </span>
             <Timestamp ts={message.timestamp} />
-            {message.streaming && (
-              <span className="text-xs text-gray-500 animate-pulse">streaming...</span>
+            {message.tokens > 0 && !message.streaming && (
+              <span className="text-gray-500" style={{ fontSize: '0.65rem' }}>{message.tokens} tokens</span>
+            )}
+            {message.interrupted && (
+              <span className="text-yellow-600" style={{ fontSize: '0.65rem' }}>interrupted</span>
+            )}
+            {message.streaming && onStop && (
+              <button
+                onClick={() => onStop(message.model)}
+                className="ml-auto text-xs px-2 py-0.5 rounded bg-red-900 hover:bg-red-700 text-red-200 transition-colors"
+              >
+                ■ Stop
+              </button>
             )}
             {!message.streaming && onReply && (
               <button

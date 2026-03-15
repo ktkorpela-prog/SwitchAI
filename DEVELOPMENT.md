@@ -1,7 +1,7 @@
 # SwitchAI — Development Notes
 
 ## Project Status
-Scaffold complete. Phase 1 (MVP) built and running.
+Scaffold complete. All planned phases built and running.
 
 ## Quick Start (after clone)
 ```bash

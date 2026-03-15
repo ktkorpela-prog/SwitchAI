@@ -73,7 +73,14 @@ export default function Message({ message, onReply, onStop }) {
             </span>
             <Timestamp ts={message.timestamp} />
             {message.tokens > 0 && !message.streaming && (
-              <span className="text-gray-500" style={{ fontSize: '0.65rem' }}>{message.tokens} tokens</span>
+              <span className="text-gray-500" style={{ fontSize: '0.65rem' }}>
+                {message.inputTokens > 0
+                  ? `${message.inputTokens}→${message.outputTokens} tok`
+                  : `${message.tokens} tok`}
+              </span>
+            )}
+            {message.contextMode && !message.streaming && message.contextMode !== 'normal' && (
+              <span className="text-gray-600" style={{ fontSize: '0.65rem' }}>{message.contextMode}</span>
             )}
             {message.interrupted && (
               <span className="text-yellow-600" style={{ fontSize: '0.65rem' }}>interrupted</span>

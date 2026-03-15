@@ -86,13 +86,13 @@ export default function App() {
       });
     });
 
-    socket.on('model_response', ({ model, tokens, interrupted, timestamp }) => {
+    socket.on('model_response', ({ model, tokens, inputTokens, outputTokens, contextMode, interrupted, timestamp }) => {
       setMessages((prev) => {
         const idx = [...prev].reverse().findIndex((m) => m.type === 'ai' && m.model === model && m.streaming);
         if (idx === -1) return prev;
         const realIdx = prev.length - 1 - idx;
         const updated = [...prev];
-        updated[realIdx] = { ...updated[realIdx], streaming: false, tokens, interrupted, timestamp };
+        updated[realIdx] = { ...updated[realIdx], streaming: false, tokens, inputTokens, outputTokens, contextMode, interrupted, timestamp };
         return updated;
       });
       setTypingModels((t) => t.filter((m) => m !== model));

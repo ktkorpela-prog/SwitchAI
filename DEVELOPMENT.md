@@ -100,6 +100,7 @@ Works with all models. The search runs server-side, results are injected as cont
 - [x] Reply-to-message (quoted preview in input bar and message thread)
 - [x] Member presence — show all users currently in the room in real time (green dot = online, gray = offline)
 - [x] Light/dark mode toggle (sun/moon button in sidebar, CSS variable based)
+- [ ] Investigate "Leave room" button — Karina unable to exit room and return to onboarding page
 - [ ] Replace OpenAI API key — previous key was accidentally exposed, revoke at platform.openai.com/api-keys
 
 ---

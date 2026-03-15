@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 
 export default function Onboarding({ onJoin }) {
   const [mode, setMode]   = useState(null); // 'create' | 'join'
-  const [form, setForm]   = useState({ roomName: '', username: '', inviteCode: '' });
+  const [form, setForm]   = useState({ roomName: '', username: '', inviteCode: '', serverPassword: '' });
   const [error, setError] = useState('');
   const [created, setCreated] = useState(null); // { roomId, roomName, inviteCode, username }
   const [copied, setCopied] = useState(false);
@@ -120,6 +120,8 @@ export default function Onboarding({ onJoin }) {
             onChange={(e) => setForm({ ...form, username: e.target.value })} required />
           <input className={inputClass} placeholder="Invite code (you'll share this)" value={form.inviteCode}
             onChange={(e) => setForm({ ...form, inviteCode: e.target.value })} required />
+          <input className={inputClass} type="password" placeholder="Server password (if set by host)" value={form.serverPassword}
+            onChange={(e) => setForm({ ...form, serverPassword: e.target.value })} />
           {error && <p className="text-red-400 text-xs">{error}</p>}
           <button type="submit" className={btnPrimary}>Create room</button>
           <button type="button" className={btnSecondary} onClick={() => setMode(null)}>Back</button>

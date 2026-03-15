@@ -1,7 +1,17 @@
-const express = require('express');
-const router = express.Router();
-const fs = require('fs');
-const path = require('path');
+const express   = require('express');
+const router    = express.Router();
+const fs        = require('fs');
+const path      = require('path');
+const rateLimit = require('express-rate-limit');
+
+// Max 10 join attempts per IP per 15 minutes
+const joinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many join attempts. Please try again later.' }
+});
 
 const ROOMS_DIR = path.join(__dirname, '../rooms');
 
@@ -27,11 +37,17 @@ function slugify(name) {
 }
 
 // POST /api/rooms/create
-// Body: { roomName, username, inviteCode }
+// Body: { roomName, username, inviteCode, serverPassword }
 router.post('/create', (req, res) => {
-  const { roomName, username, inviteCode } = req.body;
+  const { roomName, username, inviteCode, serverPassword } = req.body;
   if (!roomName || !username || !inviteCode) {
     return res.status(400).json({ error: 'roomName, username, and inviteCode are required' });
+  }
+
+  // If ROOM_SECRET is set, require it to create a room
+  const secret = process.env.ROOM_SECRET;
+  if (secret && secret !== 'change-this-to-a-random-string' && serverPassword !== secret) {
+    return res.status(403).json({ error: 'Invalid server password' });
   }
 
   const roomId = slugify(roomName);
@@ -81,7 +97,7 @@ router.post('/create', (req, res) => {
 
 // POST /api/rooms/join
 // Body: { inviteCode, username }
-router.post('/join', (req, res) => {
+router.post('/join', joinLimiter, (req, res) => {
   const { inviteCode, username } = req.body;
   if (!inviteCode || !username) {
     return res.status(400).json({ error: 'inviteCode and username are required' });

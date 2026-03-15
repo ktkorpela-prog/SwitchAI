@@ -1,8 +1,9 @@
 require('dotenv').config();
 const express = require('express');
-const http = require('http');
+const http    = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
+const path    = require('path');
+const helmet  = require('helmet');
 
 const roomsRouter = require('./routes/rooms');
 const filesRouter = require('./routes/files');
@@ -10,15 +11,37 @@ const keysRouter  = require('./routes/keys');
 const { handleMessage, stopModel } = require('./models/router');
 const keystore = require('./keystore');
 
-const app = express();
+const app    = express();
 const server = http.createServer(app);
+
+// Restrict Socket.io to same origin (or ALLOWED_ORIGINS if set)
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
+  : false; // false = same-origin only
+
 const io = new Server(server, {
-  cors: { origin: '*' }
+  cors: allowedOrigins ? { origin: allowedOrigins, credentials: true } : {}
 });
 
 const PORT = process.env.PORT || 3000;
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
+// Helmet sets X-Frame-Options, X-Content-Type-Options, HSTS, etc.
+// contentSecurityPolicy is relaxed to allow the inline styles Tailwind needs.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'"],
+      styleSrc:    ["'self'", "'unsafe-inline'"],
+      imgSrc:      ["'self'", 'data:', 'https:', 'blob:'],
+      connectSrc:  ["'self'", 'ws:', 'wss:'],
+      fontSrc:     ["'self'", 'https:'],
+      objectSrc:   ["'none'"],
+      frameSrc:    ["'none'"],
+    }
+  }
+}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client/dist')));
 

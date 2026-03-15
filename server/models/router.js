@@ -161,10 +161,16 @@ async function handleMessage(payload, io) {
 }
 
 function getEnabledModels(roomId) {
+  // @everyone targets all models that currently have a key configured.
+  // models_enabled in settings.json can explicitly exclude a model even if it has a key.
   const settingsPath = path.join(ROOMS_DIR, roomId, 'settings.json');
-  if (!fs.existsSync(settingsPath)) return Object.keys(MODEL_MAP);
-  const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-  return settings.models_enabled || Object.keys(MODEL_MAP);
+  const settings = fs.existsSync(settingsPath)
+    ? JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+    : {};
+  const explicitlyDisabled = settings.models_disabled || [];
+  return Object.keys(MODEL_MAP).filter(
+    (m) => MODEL_MAP[m].isConfigured() && !explicitlyDisabled.includes(m)
+  );
 }
 
 module.exports = { handleMessage, parseMention };

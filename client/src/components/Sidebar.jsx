@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MODELS, MODEL_KEYS } from '../constants';
 import FrictionSlider from './FrictionSlider';
 
-export default function Sidebar({ session, socket, isDark, onToggleTheme }) {
+export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeave }) {
   const [settings, setSettings]             = useState(null);
   const [showContextEditor, setShowContextEditor] = useState(false);
   const [contextText, setContextText]       = useState('');
@@ -114,6 +114,20 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme }) {
               </div>
             );
           })}
+        </div>
+
+        {/* Leave room */}
+        <div className="px-4 pt-2">
+          <button
+            onClick={onLeave}
+            className="w-full text-left text-xs text-gray-500 hover:text-red-400 flex items-center gap-2 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Leave room
+          </button>
         </div>
 
         {/* Context editor button */}

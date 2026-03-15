@@ -9,13 +9,31 @@ const socket = io();
 // ─── Theme ────────────────────────────────────────────────────────────────────
 function initTheme() {
   const saved = localStorage.getItem('switchai-theme');
-  const isDark = saved ? saved === 'dark' : true; // dark by default
+  const isDark = saved ? saved === 'dark' : true;
   document.documentElement.classList.toggle('dark', isDark);
   return isDark;
 }
 
+// ─── Session persistence ──────────────────────────────────────────────────────
+function loadSession() {
+  try {
+    const raw = localStorage.getItem('switchai-session');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(session) {
+  localStorage.setItem('switchai-session', JSON.stringify(session));
+}
+
+function clearSession() {
+  localStorage.removeItem('switchai-session');
+}
+
 export default function App() {
-  const [session, setSession]           = useState(null);
+  const [session, setSession]           = useState(loadSession);
   const [messages, setMessages]         = useState([]);
   const [typingModels, setTypingModels] = useState([]);
   const [connected, setConnected]       = useState(true);
@@ -88,9 +106,24 @@ export default function App() {
     return () => socket.off();
   }, [reconnecting]);
 
+  // Re-join socket room on session restore
+  useEffect(() => {
+    if (session) {
+      socket.emit('join_room', { roomId: session.roomId, username: session.username });
+    }
+  }, []);
+
   function handleJoin({ roomId, roomName, username, role }) {
-    setSession({ roomId, roomName, username, role });
+    const s = { roomId, roomName, username, role };
+    setSession(s);
+    saveSession(s);
     socket.emit('join_room', { roomId, username });
+  }
+
+  function handleLeave() {
+    clearSession();
+    setSession(null);
+    setMessages([]);
   }
 
   function sendMessage(text, replyTo) {
@@ -132,7 +165,7 @@ export default function App() {
         </div>
       )}
 
-      <Sidebar session={session} socket={socket} isDark={isDark} onToggleTheme={toggleTheme} />
+      <Sidebar session={session} socket={socket} isDark={isDark} onToggleTheme={toggleTheme} onLeave={handleLeave} />
       <ChatWindow
         messages={messages}
         typingModels={typingModels}

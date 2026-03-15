@@ -35,7 +35,7 @@ export default function Onboarding({ onJoin }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      onJoin({ roomId: data.roomId, roomName: data.roomName, username: form.username, role: 'Member' });
+      onJoin({ roomId: data.roomId, roomName: data.roomName, username: form.username, role: data.role || 'Member' });
     } catch (err) {
       setError(err.message);
     }

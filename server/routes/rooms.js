@@ -54,6 +54,7 @@ router.post('/create', (req, res) => {
       {
         room_name: roomName,
         invite_code: inviteCode,
+        owner: username,
         friction: { claude: 5, gpt4: 5, gemini: 5, mistral: 5 },
         models_enabled: getConfiguredModels()
       },
@@ -78,12 +79,16 @@ router.post('/join', (req, res) => {
     return res.status(404).json({ error: 'Invalid invite code' });
   }
 
-  // Append member to members.md
-  const membersPath = path.join(getRoomPath(room.roomId), 'members.md');
-  const now = new Date().toISOString();
-  fs.appendFileSync(membersPath, `| ${username} | Member | ${now} |\n`);
+  const role = room.settings.owner === username ? 'Owner' : 'Member';
 
-  res.json({ roomId: room.roomId, roomName: room.settings.room_name });
+  // Append member to members.md (skip if Owner rejoining)
+  if (role === 'Member') {
+    const membersPath = path.join(getRoomPath(room.roomId), 'members.md');
+    const now = new Date().toISOString();
+    fs.appendFileSync(membersPath, `| ${username} | Member | ${now} |\n`);
+  }
+
+  res.json({ roomId: room.roomId, roomName: room.settings.room_name, role });
 });
 
 // GET /api/rooms/:roomId/history

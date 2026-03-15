@@ -91,7 +91,7 @@ router.post('/join', (req, res) => {
   res.json({ roomId: room.roomId, roomName: room.settings.room_name, role });
 });
 
-// GET /api/rooms/:roomId/history
+// GET /api/rooms/:roomId/history  (raw markdown)
 router.get('/:roomId/history', (req, res) => {
   const historyPath = path.join(getRoomPath(req.params.roomId), 'history.md');
   if (!fs.existsSync(historyPath)) {
@@ -99,6 +99,63 @@ router.get('/:roomId/history', (req, res) => {
   }
   res.send(fs.readFileSync(historyPath, 'utf8'));
 });
+
+// GET /api/rooms/:roomId/messages  (parsed JSON for the client)
+router.get('/:roomId/messages', (req, res) => {
+  const historyPath = path.join(getRoomPath(req.params.roomId), 'history.md');
+  if (!fs.existsSync(historyPath)) {
+    return res.json([]);
+  }
+  const raw = fs.readFileSync(historyPath, 'utf8');
+  res.json(parseHistory(raw));
+});
+
+const AI_AUTHORS = { claude: 'claude', gpt4: 'gpt-4', gemini: 'gemini', mistral: 'mistral' };
+const AI_NAMES   = ['Claude', 'GPT-4', 'Gemini', 'Mistral'];
+
+function parseHistory(raw) {
+  const blocks = raw.split(/\n(?=## )/).map((b) => b.trim()).filter(Boolean);
+  const messages = [];
+  let idCounter = 1;
+
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    const header = lines[0].replace(/^## /, '');
+    const [timestampPart, ...authorParts] = header.split(' | ');
+    const author = authorParts.join(' | ').trim();
+
+    // Skip metadata lines (starting with >) and empty lines to get content
+    const contentLines = lines.slice(1).filter((l) => !l.startsWith('>'));
+    const content = contentLines.join('\n').trim();
+    if (!content) continue;
+
+    const isAI = AI_NAMES.some((n) => author.startsWith(n));
+
+    if (isAI) {
+      const modelKey = Object.keys(AI_AUTHORS).find((k) =>
+        author.toLowerCase().startsWith(AI_AUTHORS[k])
+      ) || 'claude';
+      messages.push({
+        type: 'ai',
+        model: modelKey,
+        text: content,
+        timestamp: timestampPart,
+        streaming: false,
+        id: idCounter++
+      });
+    } else {
+      messages.push({
+        type: 'human',
+        username: author,
+        text: content,
+        timestamp: timestampPart,
+        id: idCounter++
+      });
+    }
+  }
+
+  return messages;
+}
 
 // GET /api/rooms/:roomId/settings
 router.get('/:roomId/settings', (req, res) => {

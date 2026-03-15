@@ -106,12 +106,15 @@ export default function App() {
     return () => socket.off();
   }, [reconnecting]);
 
-  // Re-join socket room on session restore
+  // On session load (fresh join or page restore), fetch history and re-join socket
   useEffect(() => {
-    if (session) {
-      socket.emit('join_room', { roomId: session.roomId, username: session.username });
-    }
-  }, []);
+    if (!session) return;
+    socket.emit('join_room', { roomId: session.roomId, username: session.username });
+    fetch(`/api/rooms/${session.roomId}/messages`)
+      .then((r) => r.json())
+      .then((history) => setMessages(history))
+      .catch(console.error);
+  }, [session?.roomId]);
 
   function handleJoin({ roomId, roomName, username, role }) {
     const s = { roomId, roomName, username, role };

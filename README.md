@@ -1,6 +1,7 @@
 # SwitchAI
 
 **Self-hosted shared AI chat rooms for households and small teams.**
+![SwitchAI Screenshot](screenshot.png)
 
 One person pays for the API keys. Everyone else joins free via an invite code. All AI models participate in a single chronological thread — switch between them mid-conversation without losing context.
 

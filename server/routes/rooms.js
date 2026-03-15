@@ -5,8 +5,21 @@ const path = require('path');
 
 const ROOMS_DIR = path.join(__dirname, '../rooms');
 
+// ── roomId validation — only slugified alphanum/dash allowed ──────────────
+router.param('roomId', (req, res, next, id) => {
+  if (!/^[a-z0-9-]+$/.test(id)) {
+    return res.status(400).json({ error: 'Invalid room ID' });
+  }
+  next();
+});
+
 function getRoomPath(roomId) {
   return path.join(ROOMS_DIR, roomId);
+}
+
+// Escape pipe characters so usernames can't break members.md table parsing
+function escapeMd(str) {
+  return str.replace(/\|/g, '\\|').replace(/\n/g, ' ').replace(/\r/g, '');
 }
 
 function slugify(name) {
@@ -44,7 +57,7 @@ router.post('/create', (req, res) => {
   const now = new Date().toISOString();
   fs.writeFileSync(
     path.join(roomPath, 'members.md'),
-    `# Members\n\n| Username | Role | Joined |\n|----------|------|--------|\n| ${username} | Owner | ${now} |\n`
+    `# Members\n\n| Username | Role | Joined |\n|----------|------|--------|\n| ${escapeMd(username)} | Owner | ${now} |\n`
   );
 
   // settings.json — friction and model config
@@ -85,7 +98,7 @@ router.post('/join', (req, res) => {
   if (role === 'Member') {
     const membersPath = path.join(getRoomPath(room.roomId), 'members.md');
     const now = new Date().toISOString();
-    fs.appendFileSync(membersPath, `| ${username} | Member | ${now} |\n`);
+    fs.appendFileSync(membersPath, `| ${escapeMd(username)} | Member | ${now} |\n`);
   }
 
   res.json({ roomId: room.roomId, roomName: room.settings.room_name, role });

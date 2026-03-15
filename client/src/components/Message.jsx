@@ -2,6 +2,20 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { MODELS } from '../constants';
 
+// Block javascript: and data: URIs in rendered markdown to prevent XSS
+const mdComponents = {
+  a: ({ node, href, children, ...props }) => {
+    if (!href || /^javascript:/i.test(href) || /^data:/i.test(href)) {
+      return <span>{children}</span>;
+    }
+    return <a href={href} rel="noopener noreferrer" target="_blank" {...props}>{children}</a>;
+  },
+  img: ({ node, src, alt, ...props }) => {
+    if (!src || /^javascript:/i.test(src) || /^data:(?!image)/i.test(src)) return null;
+    return <img src={src} alt={alt} {...props} />;
+  }
+};
+
 function Avatar({ name, color }) {
   return (
     <div
@@ -105,7 +119,7 @@ export default function Message({ message, onReply, onStop }) {
           </div>
           <QuotedReply replyTo={message.replyTo} />
           <div className="text-sm text-gray-100 prose prose-invert prose-sm max-w-none">
-            <ReactMarkdown>{message.text}</ReactMarkdown>
+            <ReactMarkdown components={mdComponents}>{message.text}</ReactMarkdown>
           </div>
         </div>
       </div>
@@ -138,7 +152,7 @@ export default function Message({ message, onReply, onStop }) {
         </div>
         <QuotedReply replyTo={message.replyTo} />
         <div className="text-sm text-gray-200 prose prose-invert prose-sm max-w-none">
-          <ReactMarkdown>{message.text}</ReactMarkdown>
+          <ReactMarkdown components={mdComponents}>{message.text}</ReactMarkdown>
         </div>
       </div>
     </div>

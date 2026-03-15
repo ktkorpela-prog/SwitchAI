@@ -45,6 +45,8 @@ io.on('connection', (socket) => {
   console.log(`[socket] client connected: ${socket.id}`);
 
   socket.on('join_room', ({ roomId, username }) => {
+    if (!roomId || !/^[a-z0-9-]+$/.test(roomId)) return;
+    if (!username || typeof username !== 'string') return;
     socket.join(roomId);
     socket.data.roomId = roomId;
     socket.data.username = username;

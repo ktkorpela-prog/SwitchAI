@@ -1,28 +1,17 @@
 const { Mistral } = require('@mistralai/mistralai');
-
-let client = null;
-
-function getClient() {
-  if (!client) client = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
-  return client;
-}
+const keystore = require('../keystore');
 
 function isConfigured() {
-  return !!process.env.MISTRAL_API_KEY;
+  return !!keystore.getKey('mistral');
 }
 
-/**
- * Call Mistral with streaming.
- */
 async function call(messages, systemPrompt, frictionLevel, onChunk) {
+  const client = new Mistral({ apiKey: keystore.getKey('mistral') });
   const model = process.env.MISTRAL_MODEL || 'mistral-large-latest';
 
-  const stream = await getClient().chat.stream({
+  const stream = await client.chat.stream({
     model,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...messages
-    ]
+    messages: [{ role: 'system', content: systemPrompt }, ...messages]
   });
 
   for await (const chunk of stream) {

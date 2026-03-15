@@ -1,29 +1,15 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-let client = null;
-
-function getClient() {
-  if (!client) client = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
-  return client;
-}
+const keystore = require('../keystore');
 
 function isConfigured() {
-  return !!process.env.GOOGLE_GEMINI_API_KEY;
+  return !!keystore.getKey('gemini');
 }
 
-/**
- * Call Gemini with streaming.
- * Note: Gemini uses a different message format — history is mapped accordingly.
- */
 async function call(messages, systemPrompt, frictionLevel, onChunk) {
+  const client = new GoogleGenerativeAI(keystore.getKey('gemini'));
   const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-pro';
-  const model = getClient().getGenerativeModel({
-    model: modelName,
-    systemInstruction: systemPrompt
-  });
+  const model = client.getGenerativeModel({ model: modelName, systemInstruction: systemPrompt });
 
-  // Gemini expects { role: 'user'|'model', parts: [{ text }] }
-  // Last message is the new user prompt; the rest are history
   const history = messages.slice(0, -1).map((m) => ({
     role: m.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: m.content }]

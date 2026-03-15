@@ -6,7 +6,9 @@ const path = require('path');
 
 const roomsRouter = require('./routes/rooms');
 const filesRouter = require('./routes/files');
+const keysRouter  = require('./routes/keys');
 const { handleMessage } = require('./models/router');
+const keystore = require('./keystore');
 
 const app = express();
 const server = http.createServer(app);
@@ -23,6 +25,7 @@ app.use(express.static(path.join(__dirname, '../client/dist')));
 // ─── REST Routes ─────────────────────────────────────────────────────────────
 app.use('/api/rooms', roomsRouter);
 app.use('/api/files', filesRouter);
+app.use('/api/keys',  keysRouter);
 
 // Serve React app for all non-API routes
 app.get('*', (req, res) => {
@@ -67,10 +70,6 @@ server.listen(PORT, () => {
 });
 
 function getConfiguredModels() {
-  const models = [];
-  if (process.env.ANTHROPIC_API_KEY) models.push('claude');
-  if (process.env.OPENAI_API_KEY) models.push('gpt4');
-  if (process.env.GOOGLE_GEMINI_API_KEY) models.push('gemini');
-  if (process.env.MISTRAL_API_KEY) models.push('mistral');
-  return models;
+  const status = keystore.getStatus();
+  return Object.keys(status).filter((m) => status[m]);
 }

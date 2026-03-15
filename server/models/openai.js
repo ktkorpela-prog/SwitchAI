@@ -1,29 +1,18 @@
 const OpenAI = require('openai');
-
-let client = null;
-
-function getClient() {
-  if (!client) client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return client;
-}
+const keystore = require('../keystore');
 
 function isConfigured() {
-  return !!process.env.OPENAI_API_KEY;
+  return !!keystore.getKey('gpt4');
 }
 
-/**
- * Call GPT-4 with streaming.
- */
 async function call(messages, systemPrompt, frictionLevel, onChunk) {
+  const client = new OpenAI({ apiKey: keystore.getKey('gpt4') });
   const model = process.env.OPENAI_MODEL || 'gpt-4o';
 
-  const stream = await getClient().chat.completions.create({
+  const stream = await client.chat.completions.create({
     model,
     stream: true,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...messages
-    ]
+    messages: [{ role: 'system', content: systemPrompt }, ...messages]
   });
 
   for await (const chunk of stream) {

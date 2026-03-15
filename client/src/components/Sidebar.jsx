@@ -7,6 +7,10 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
   const [showContextEditor, setShowContextEditor] = useState(false);
   const [contextText, setContextText]       = useState('');
   const [contextSaving, setContextSaving]   = useState(false);
+  const [showKeysModal, setShowKeysModal]   = useState(false);
+  const [keyStatus, setKeyStatus]           = useState({});
+  const [keyInputs, setKeyInputs]           = useState({});
+  const [keySaving, setKeySaving]           = useState({});
 
   useEffect(() => {
     fetch(`/api/rooms/${session.roomId}/settings`)
@@ -14,6 +18,31 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
       .then(setSettings)
       .catch(console.error);
   }, [session.roomId]);
+
+  async function openKeysModal() {
+    const res = await fetch('/api/keys/status');
+    const status = await res.json();
+    setKeyStatus(status);
+    setKeyInputs({});
+    setShowKeysModal(true);
+  }
+
+  async function saveKey(model) {
+    const apiKey = keyInputs[model] || '';
+    setKeySaving((s) => ({ ...s, [model]: true }));
+    const res = await fetch(`/api/keys/${model}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey })
+    });
+    const data = await res.json();
+    setKeyStatus((s) => ({ ...s, [model]: data.configured }));
+    setKeyInputs((s) => ({ ...s, [model]: '' }));
+    setKeySaving((s) => ({ ...s, [model]: false }));
+    // Update sidebar model status
+    const settingsRes = await fetch(`/api/rooms/${session.roomId}/settings`);
+    setSettings(await settingsRes.json());
+  }
 
   async function openContextEditor() {
     const res = await fetch(`/api/rooms/${session.roomId}/context`);
@@ -116,6 +145,22 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
           })}
         </div>
 
+        {/* API Keys button — Owner only */}
+        {isOwner && (
+          <div className="px-4 pt-3">
+            <button
+              onClick={openKeysModal}
+              className="w-full text-left text-xs text-gray-400 hover:text-gray-200 flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+              Manage API keys
+            </button>
+          </div>
+        )}
+
         {/* Leave room */}
         <div className="px-4 pt-2">
           <button
@@ -146,6 +191,72 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
           </div>
         )}
       </div>
+
+      {/* API Keys modal */}
+      {showKeysModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-surface border border-border rounded-lg w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h3 className="font-semibold text-white text-sm">API Keys</h3>
+              <button onClick={() => setShowKeysModal(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
+            </div>
+            <p className="px-4 pt-3 text-xs text-gray-500">
+              Keys are stored only on this machine in <code className="font-mono">keys.local.json</code> and never shared with other users.
+            </p>
+            <div className="p-4 space-y-4">
+              {MODEL_KEYS.map((key) => {
+                const model = MODELS[key];
+                const configured = keyStatus[key];
+                return (
+                  <div key={key}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-xs font-semibold px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: model.color }}>
+                        {model.name}
+                      </span>
+                      <span className={`text-xs ${configured ? 'text-green-400' : 'text-gray-500'}`}>
+                        {configured ? '✓ configured' : 'not set'}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        className="flex-1 bg-surface-raised border border-border rounded px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-accent font-mono"
+                        placeholder={configured ? '••••••••••••••••' : 'Paste API key...'}
+                        value={keyInputs[key] || ''}
+                        onChange={(e) => setKeyInputs((s) => ({ ...s, [key]: e.target.value }))}
+                      />
+                      <button
+                        onClick={() => saveKey(key)}
+                        disabled={keySaving[key] || !keyInputs[key]}
+                        className="px-3 py-1.5 bg-accent hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-xs rounded transition-colors"
+                      >
+                        {keySaving[key] ? '...' : 'Save'}
+                      </button>
+                      {configured && (
+                        <button
+                          onClick={() => { setKeyInputs((s) => ({ ...s, [key]: '' })); saveKey(key); }}
+                          className="px-3 py-1.5 bg-surface-raised hover:bg-red-900 text-gray-400 hover:text-red-300 text-xs rounded transition-colors"
+                          title="Remove key"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="px-4 pb-4">
+              <button
+                onClick={() => setShowKeysModal(false)}
+                className="w-full bg-surface-raised hover:bg-border text-gray-300 text-sm font-medium py-2 rounded transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Context editor modal */}
       {showContextEditor && (

@@ -23,7 +23,18 @@ function Timestamp({ ts }) {
   );
 }
 
-export default function Message({ message }) {
+function QuotedReply({ replyTo }) {
+  if (!replyTo) return null;
+  const preview = replyTo.text?.replace(/!\[.*?\]\(.*?\)/g, '[image]').slice(0, 80);
+  return (
+    <div className="mb-1.5 pl-2 border-l-2 border-gray-500 text-xs text-gray-400 italic truncate">
+      <span className="text-gray-300 font-medium not-italic">{replyTo.username}: </span>
+      {preview}{replyTo.text?.length > 80 ? '...' : ''}
+    </div>
+  );
+}
+
+export default function Message({ message, onReply }) {
   if (message.type === 'system') {
     return (
       <div className="text-center text-xs text-gray-500 py-1">
@@ -48,7 +59,7 @@ export default function Message({ message }) {
     const model = MODELS[message.model] || { name: message.model, color: '#6B7280' };
     return (
       <div
-        className="flex items-start gap-3 py-2 px-3 rounded-lg border-l-[3px]"
+        className="group flex items-start gap-3 py-2 px-3 rounded-lg border-l-[3px]"
         style={{ backgroundColor: '#1E2235', borderColor: model.color }}
       >
         <Avatar name={model.name} color={model.color} />
@@ -64,7 +75,17 @@ export default function Message({ message }) {
             {message.streaming && (
               <span className="text-xs text-gray-500 animate-pulse">streaming...</span>
             )}
+            {!message.streaming && onReply && (
+              <button
+                onClick={() => onReply(message)}
+                className="ml-auto opacity-0 group-hover:opacity-100 text-gray-500 hover:text-gray-300 transition-opacity text-xs"
+                title="Reply"
+              >
+                ↩ Reply
+              </button>
+            )}
           </div>
+          <QuotedReply replyTo={message.replyTo} />
           <div className="text-sm text-gray-100 prose prose-invert prose-sm max-w-none">
             <ReactMarkdown>{message.text}</ReactMarkdown>
           </div>
@@ -75,13 +96,23 @@ export default function Message({ message }) {
 
   // Human message
   return (
-    <div className="flex items-start gap-3 py-2 px-3 rounded-lg hover:bg-surface transition-colors group">
+    <div className="group flex items-start gap-3 py-2 px-3 rounded-lg hover:bg-surface transition-colors">
       <Avatar name={message.username} />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2 mb-1">
           <span className="text-sm font-medium text-gray-100">{message.username}</span>
           <Timestamp ts={message.timestamp} />
+          {onReply && (
+            <button
+              onClick={() => onReply(message)}
+              className="ml-auto opacity-0 group-hover:opacity-100 text-gray-500 hover:text-gray-300 transition-opacity text-xs"
+              title="Reply"
+            >
+              ↩ Reply
+            </button>
+          )}
         </div>
+        <QuotedReply replyTo={message.replyTo} />
         <div className="text-sm text-gray-200 prose prose-invert prose-sm max-w-none">
           <ReactMarkdown>{message.text}</ReactMarkdown>
         </div>

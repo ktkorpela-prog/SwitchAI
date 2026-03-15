@@ -9,7 +9,7 @@ const socket = io();
 export default function App() {
   const [session, setSession] = useState(null); // { roomId, roomName, username, role }
   const [messages, setMessages] = useState([]);
-  const [typingModels, setTypingModels] = useState([]); // models currently "thinking"
+  const [typingModels, setTypingModels] = useState([]);
   const [connected, setConnected] = useState(true);
 
   useEffect(() => {
@@ -34,14 +34,12 @@ export default function App() {
         if (last?.type === 'ai' && last.model === model && last.streaming) {
           return [...prev.slice(0, -1), { ...last, text: last.text + chunk }];
         }
-        // Start a new streaming AI message
         setTypingModels((t) => t.filter((m) => m !== model));
         return [...prev, { type: 'ai', model, text: chunk, streaming: true, id: Date.now() }];
       });
     });
 
     socket.on('model_response', ({ model, text, timestamp }) => {
-      // Mark streaming as complete
       setMessages((prev) => {
         const idx = [...prev].reverse().findIndex((m) => m.type === 'ai' && m.model === model && m.streaming);
         if (idx === -1) return prev;
@@ -66,12 +64,15 @@ export default function App() {
     socket.emit('join_room', { roomId, username });
   }
 
-  function sendMessage(text) {
+  function sendMessage(text, replyTo) {
     if (!text.trim() || !session) return;
     const msg = {
       roomId: session.roomId,
       username: session.username,
       text,
+      replyTo: replyTo
+        ? { id: replyTo.id, username: replyTo.username || replyTo.model, text: replyTo.text }
+        : null,
       timestamp: new Date().toISOString(),
       id: Date.now()
     };

@@ -11,13 +11,22 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
   const [keyStatus, setKeyStatus]           = useState({});
   const [keyInputs, setKeyInputs]           = useState({});
   const [keySaving, setKeySaving]           = useState({});
+  const [tokenTotals, setTokenTotals]       = useState({});
 
   useEffect(() => {
     fetch(`/api/rooms/${session.roomId}/settings`)
       .then((r) => r.json())
-      .then(setSettings)
+      .then((s) => {
+        setSettings(s);
+        setTokenTotals(s.token_totals || {});
+      })
       .catch(console.error);
   }, [session.roomId]);
+
+  useEffect(() => {
+    socket.on('token_totals', setTokenTotals);
+    return () => socket.off('token_totals', setTokenTotals);
+  }, [socket]);
 
   async function openKeysModal() {
     const res = await fetch('/api/keys/status');
@@ -139,6 +148,13 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
                 )}
                 {!isOwner && (
                   <p className="text-xs text-gray-500 ml-4">Friction: {friction}</p>
+                )}
+                {tokenTotals[key] > 0 && (
+                  <p className="text-xs text-gray-500 ml-4 mt-0.5">
+                    {tokenTotals[key] >= 1000
+                      ? `${(tokenTotals[key] / 1000).toFixed(1)}k tokens`
+                      : `${tokenTotals[key]} tokens`}
+                  </p>
                 )}
               </div>
             );

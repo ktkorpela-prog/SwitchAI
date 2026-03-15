@@ -147,6 +147,12 @@ async function handleMessage(payload, io) {
         const meta = `model: ${target} | tokens: ${tokens}${interrupted ? ' | interrupted' : ''}`;
         appendToHistory(roomId, displayName, fullResponse, meta);
       }
+
+      // Update cumulative token totals in settings.json and broadcast
+      if (tokens > 0) {
+        const totals = updateTokenTotals(roomId, target, tokens);
+        io.to(roomId).emit('token_totals', totals);
+      }
     } catch (err) {
       if (!controller.signal.aborted) {
         console.error(`[model:${target}] error:`, err.message);
@@ -167,6 +173,16 @@ function getEnabledModels(roomId) {
   return Object.keys(MODEL_MAP).filter(
     (m) => MODEL_MAP[m].isConfigured() && !explicitlyDisabled.includes(m)
   );
+}
+
+function updateTokenTotals(roomId, model, tokens) {
+  const settingsPath = path.join(ROOMS_DIR, roomId, 'settings.json');
+  if (!fs.existsSync(settingsPath)) return {};
+  const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  if (!settings.token_totals) settings.token_totals = {};
+  settings.token_totals[model] = (settings.token_totals[model] || 0) + tokens;
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  return settings.token_totals;
 }
 
 module.exports = { handleMessage, parseMention, stopModel };

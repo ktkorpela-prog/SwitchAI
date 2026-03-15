@@ -197,6 +197,44 @@ router.put('/:roomId/context', (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/rooms/:roomId/members
+router.get('/:roomId/members', (req, res) => {
+  const membersPath = path.join(getRoomPath(req.params.roomId), 'members.md');
+  if (!fs.existsSync(membersPath)) return res.json([]);
+  res.json(parseMembers(fs.readFileSync(membersPath, 'utf8')));
+});
+
+// DELETE /api/rooms/:roomId/members/:username  — kick a member
+router.delete('/:roomId/members/:username', (req, res) => {
+  const { roomId, username } = req.params;
+  const membersPath = path.join(getRoomPath(roomId), 'members.md');
+  if (!fs.existsSync(membersPath)) return res.status(404).json({ error: 'Room not found' });
+
+  const raw = fs.readFileSync(membersPath, 'utf8');
+  // Remove all rows matching the username
+  const filtered = raw.split('\n').filter((line) => {
+    const col = line.split('|')[1]?.trim();
+    return !col || col === 'Username' || col !== username;
+  }).join('\n');
+  fs.writeFileSync(membersPath, filtered);
+  res.json({ ok: true });
+});
+
+function parseMembers(raw) {
+  const seen = new Set();
+  return raw.split('\n')
+    .filter((l) => l.startsWith('|') && !l.includes('---') && !l.includes('Username'))
+    .map((l) => {
+      const [, username, role, joined] = l.split('|').map((s) => s.trim());
+      return { username, role, joined };
+    })
+    .filter(({ username }) => {
+      if (!username || seen.has(username)) return false;
+      seen.add(username);
+      return true;
+    });
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function findRoomByInviteCode(inviteCode) {
   if (!fs.existsSync(ROOMS_DIR)) return null;

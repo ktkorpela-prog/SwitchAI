@@ -107,6 +107,12 @@ export default function App() {
       setMessages((prev) => [...prev, { type: 'error', model, text: error, id: Date.now() }]);
     });
 
+    socket.on('kicked', () => {
+      clearSession();
+      setSession(null);
+      setMessages([]);
+    });
+
     return () => socket.off();
   }, [reconnecting]);
 

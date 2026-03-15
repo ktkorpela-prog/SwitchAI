@@ -41,6 +41,7 @@ io.on('connection', (socket) => {
     socket.data.roomId = roomId;
     socket.data.username = username;
     io.to(roomId).emit('system_message', { text: `${username} joined the room` });
+    io.to(roomId).emit('member_joined', { username });
     console.log(`[room] ${username} joined ${roomId}`);
   });
 
@@ -64,6 +65,21 @@ io.on('connection', (socket) => {
 
   socket.on('clear_messages', ({ roomId, username }) => {
     io.to(roomId).emit('messages_cleared', { username });
+  });
+
+  socket.on('kick_member', ({ roomId, targetUsername }) => {
+    // Find target's socket(s) and emit kicked event
+    for (const [id, s] of io.sockets.sockets) {
+      if (s.data.roomId === roomId && s.data.username === targetUsername) {
+        s.emit('kicked', { by: socket.data.username });
+        s.leave(roomId);
+      }
+    }
+    io.to(roomId).emit('system_message', { text: `${targetUsername} was removed from the room` });
+  });
+
+  socket.on('member_joined', ({ roomId, username }) => {
+    io.to(roomId).emit('member_joined', { username });
   });
 
   socket.on('disconnect', () => {

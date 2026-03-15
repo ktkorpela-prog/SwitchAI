@@ -178,6 +178,18 @@ export default function InputBar({ session, onSend, replyTo, onClearReply }) {
           value={text}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onPaste={(e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            for (const item of items) {
+              if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                const file = item.getAsFile();
+                if (file) uploadFile(file);
+                return;
+              }
+            }
+          }}
           style={{ lineHeight: '1.5' }}
         />
 

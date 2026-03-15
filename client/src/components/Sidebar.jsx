@@ -12,6 +12,7 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
   const [keyInputs, setKeyInputs]           = useState({});
   const [keySaving, setKeySaving]           = useState({});
   const [tokenTotals, setTokenTotals]       = useState({});
+  const [members, setMembers]               = useState([]);
 
   useEffect(() => {
     fetch(`/api/rooms/${session.roomId}/settings`)
@@ -21,12 +22,30 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
         setTokenTotals(s.token_totals || {});
       })
       .catch(console.error);
+    fetchMembers();
   }, [session.roomId]);
 
   useEffect(() => {
     socket.on('token_totals', setTokenTotals);
-    return () => socket.off('token_totals', setTokenTotals);
+    socket.on('member_joined', () => fetchMembers());
+    return () => {
+      socket.off('token_totals', setTokenTotals);
+      socket.off('member_joined');
+    };
   }, [socket]);
+
+  function fetchMembers() {
+    fetch(`/api/rooms/${session.roomId}/members`)
+      .then((r) => r.json())
+      .then(setMembers)
+      .catch(console.error);
+  }
+
+  async function kickMember(username) {
+    await fetch(`/api/rooms/${session.roomId}/members/${encodeURIComponent(username)}`, { method: 'DELETE' });
+    socket.emit('kick_member', { roomId: session.roomId, targetUsername: username });
+    fetchMembers();
+  }
 
   async function openKeysModal() {
     const res = await fetch('/api/keys/status');
@@ -121,11 +140,32 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
         {/* Members */}
         <div className="px-4 py-3">
           <p className="text-xs uppercase tracking-wider text-gray-500 mb-2">Members</p>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-500" />
-            <span className="text-sm text-gray-200">{session.username}</span>
-            {isOwner && <span className="text-xs text-yellow-400">👑</span>}
-          </div>
+          {members.length === 0 ? (
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="text-sm text-gray-200">{session.username}</span>
+              {isOwner && <span className="text-xs text-yellow-400">👑</span>}
+            </div>
+          ) : (
+            members.map((m) => (
+              <div key={m.username} className="flex items-center gap-2 mb-1 group">
+                <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                <span className="text-sm text-gray-200 flex-1 truncate">{m.username}</span>
+                {m.role === 'Owner' && <span className="text-xs text-yellow-400">👑</span>}
+                {isOwner && m.username !== session.username && m.role !== 'Owner' && (
+                  <button
+                    onClick={() => kickMember(m.username)}
+                    className="text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                    title={`Kick ${m.username}`}
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ))
+          )}
         </div>
 
         {/* Models */}
@@ -149,13 +189,11 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
                 {!isOwner && (
                   <p className="text-xs text-gray-500 ml-4">Friction: {friction}</p>
                 )}
-                {tokenTotals[key] > 0 && (
-                  <p className="text-xs text-gray-500 ml-4 mt-0.5">
-                    {tokenTotals[key] >= 1000
-                      ? `${(tokenTotals[key] / 1000).toFixed(1)}k tokens`
-                      : `${tokenTotals[key]} tokens`}
-                  </p>
-                )}
+                <p className="text-xs text-gray-500 ml-4 mt-0.5">
+                  {(tokenTotals[key] || 0) >= 1000
+                    ? `${((tokenTotals[key] || 0) / 1000).toFixed(1)}k tokens`
+                    : `${tokenTotals[key] || 0} tokens`}
+                </p>
               </div>
             );
           })}

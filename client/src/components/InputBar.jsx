@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { MODEL_KEYS, MODELS } from '../constants';
 
 const MAX_CHARS = 4000;
@@ -11,6 +11,24 @@ export default function InputBar({ session, onSend, replyTo, onClearReply }) {
   const [uploading, setUploading]     = useState(false);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // Catch paste anywhere on the page — useful when textarea doesn't have focus
+  useEffect(() => {
+    function handleWindowPaste(e) {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) uploadFile(file);
+          return;
+        }
+      }
+    }
+    window.addEventListener('paste', handleWindowPaste);
+    return () => window.removeEventListener('paste', handleWindowPaste);
+  }, [session.roomId]);
 
   const filteredModels = MODEL_KEYS.filter((k) => k.startsWith(pickerFilter));
   const pickerOptions = [
@@ -178,18 +196,6 @@ export default function InputBar({ session, onSend, replyTo, onClearReply }) {
           value={text}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          onPaste={(e) => {
-            const items = e.clipboardData?.items;
-            if (!items) return;
-            for (const item of items) {
-              if (item.type.startsWith('image/')) {
-                e.preventDefault();
-                const file = item.getAsFile();
-                if (file) uploadFile(file);
-                return;
-              }
-            }
-          }}
           style={{ lineHeight: '1.5' }}
         />
 

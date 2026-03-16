@@ -75,6 +75,14 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
     setSettings(await settingsRes.json());
   }
 
+  async function archiveHistory() {
+    if (!window.confirm('Archive the chat history and start fresh? The archive is kept on the server.')) return;
+    const res = await fetch(`/api/rooms/${session.roomId}/archive`, { method: 'POST' });
+    if (res.ok) {
+      socket.emit('clear_messages', { roomId: session.roomId, username: session.username });
+    }
+  }
+
   async function openContextEditor() {
     const res = await fetch(`/api/rooms/${session.roomId}/context`);
     const text = await res.text();
@@ -237,6 +245,22 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
             Leave room
           </button>
         </div>
+
+        {/* Archive history button — Owner only */}
+        {isOwner && (
+          <div className="px-4 pt-2">
+            <button
+              onClick={archiveHistory}
+              className="w-full text-left text-xs text-gray-400 hover:text-yellow-400 flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+              Archive history
+            </button>
+          </div>
+        )}
 
         {/* Context editor button */}
         {isOwner && (

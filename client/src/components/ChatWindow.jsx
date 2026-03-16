@@ -3,7 +3,7 @@ import Message from './Message';
 import InputBar from './InputBar';
 import TypingIndicator from './TypingIndicator';
 
-export default function ChatWindow({ messages, typingModels, session, onSend, onStop, onClear }) {
+export default function ChatWindow({ messages, typingModels, session, onSend, onStop, onClear, hasMoreHistory, onLoadOlder }) {
   const bottomRef = useRef(null);
   const dropZoneRef = useRef(null);
   const [replyTo, setReplyTo] = useState(null);
@@ -97,6 +97,16 @@ export default function ChatWindow({ messages, typingModels, session, onSend, on
 
       {/* Thread */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+        {hasMoreHistory && (
+          <div className="flex justify-center pb-2">
+            <button
+              onClick={onLoadOlder}
+              className="text-xs text-gray-500 hover:text-gray-300 border border-border rounded px-3 py-1 transition-colors"
+            >
+              Load older messages
+            </button>
+          </div>
+        )}
         {messages.map((msg, i) => (
           <Message
             key={msg.id || i}

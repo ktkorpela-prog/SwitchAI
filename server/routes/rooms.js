@@ -130,13 +130,46 @@ router.get('/:roomId/history', (req, res) => {
 });
 
 // GET /api/rooms/:roomId/messages  (parsed JSON for the client)
+// Query params: ?limit=100&skip=0
+// Returns: { messages, hasMore, total }
 router.get('/:roomId/messages', (req, res) => {
   const historyPath = path.join(getRoomPath(req.params.roomId), 'history.md');
   if (!fs.existsSync(historyPath)) {
-    return res.json([]);
+    return res.json({ messages: [], hasMore: false, total: 0 });
   }
-  const raw = fs.readFileSync(historyPath, 'utf8');
-  res.json(parseHistory(raw));
+
+  const all   = parseHistory(fs.readFileSync(historyPath, 'utf8'));
+  const limit = Math.min(parseInt(req.query.limit || '100', 10), 200);
+  const skip  = Math.max(parseInt(req.query.skip  || '0',   10), 0);
+  const total = all.length;
+
+  const end      = total - skip;
+  const start    = Math.max(0, end - limit);
+  const messages = all.slice(start, end > 0 ? end : 0);
+
+  res.json({ messages, hasMore: start > 0, total });
+});
+
+// POST /api/rooms/:roomId/archive  — Owner archives history and starts fresh
+router.post('/:roomId/archive', (req, res) => {
+  const roomPath    = getRoomPath(req.params.roomId);
+  const historyPath = path.join(roomPath, 'history.md');
+
+  if (!fs.existsSync(historyPath)) {
+    return res.status(404).json({ error: 'Room not found' });
+  }
+
+  const content = fs.readFileSync(historyPath, 'utf8');
+  if (!content.trim()) {
+    return res.json({ ok: true, archived: false });
+  }
+
+  const timestamp   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const archivePath = path.join(roomPath, `history-archive-${timestamp}.md`);
+  fs.writeFileSync(archivePath, content);
+  fs.writeFileSync(historyPath, '');
+
+  res.json({ ok: true, archived: true });
 });
 
 const AI_AUTHORS = { claude: 'claude', gpt4: 'gpt-4', gemini: 'gemini', mistral: 'mistral' };

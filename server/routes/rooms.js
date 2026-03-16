@@ -2,6 +2,7 @@ const express   = require('express');
 const router    = express.Router();
 const fs        = require('fs');
 const path      = require('path');
+const crypto    = require('crypto');
 const rateLimit = require('express-rate-limit');
 
 // Max 10 join attempts per IP per 15 minutes
@@ -27,6 +28,35 @@ function getRoomPath(roomId) {
   return path.join(ROOMS_DIR, roomId);
 }
 
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+function getAuthHeaders(req) {
+  return {
+    inviteCode: String(req.headers['x-invite-code'] || '').slice(0, 256),
+    username:   String(req.headers['x-username']   || '').slice(0, 100),
+  };
+}
+
+function verifyInviteCode(roomId, inviteCode) {
+  const settingsPath = path.join(getRoomPath(roomId), 'settings.json');
+  if (!fs.existsSync(settingsPath)) return false;
+  try {
+    const stored = JSON.parse(fs.readFileSync(settingsPath, 'utf8')).invite_code;
+    if (!stored || !inviteCode) return false;
+    const a = Buffer.from(stored);
+    const b = Buffer.from(inviteCode);
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  } catch { return false; }
+}
+
+function verifyOwner(roomId, username) {
+  const settingsPath = path.join(getRoomPath(roomId), 'settings.json');
+  if (!fs.existsSync(settingsPath)) return false;
+  try {
+    return JSON.parse(fs.readFileSync(settingsPath, 'utf8')).owner === username;
+  } catch { return false; }
+}
+
 // Escape pipe characters so usernames can't break members.md table parsing
 function escapeMd(str) {
   return str.replace(/\|/g, '\\|').replace(/\n/g, ' ').replace(/\r/g, '');
@@ -44,10 +74,18 @@ router.post('/create', (req, res) => {
     return res.status(400).json({ error: 'roomName, username, and inviteCode are required' });
   }
 
-  // If ROOM_SECRET is set, require it to create a room
+  if (!/^[a-zA-Z0-9_-]{4,64}$/.test(inviteCode)) {
+    return res.status(400).json({ error: 'Invite code must be 4–64 characters (letters, numbers, hyphens, underscores)' });
+  }
+
+  // If ROOM_SECRET is set, require it to create a room (timing-safe compare)
   const secret = process.env.ROOM_SECRET;
-  if (secret && secret !== 'change-this-to-a-random-string' && serverPassword !== secret) {
-    return res.status(403).json({ error: 'Invalid server password' });
+  if (secret && secret !== 'change-this-to-a-random-string') {
+    const secretBuf   = Buffer.from(secret);
+    const passwordBuf = Buffer.from(typeof serverPassword === 'string' ? serverPassword : '');
+    const match = secretBuf.length === passwordBuf.length &&
+                  crypto.timingSafeEqual(secretBuf, passwordBuf);
+    if (!match) return res.status(403).json({ error: 'Invalid server password' });
   }
 
   const roomId = slugify(roomName);
@@ -103,6 +141,10 @@ router.post('/join', joinLimiter, (req, res) => {
     return res.status(400).json({ error: 'inviteCode and username are required' });
   }
 
+  if (!/^[a-zA-Z0-9_-]{4,64}$/.test(inviteCode)) {
+    return res.status(400).json({ error: 'Invalid invite code' });
+  }
+
   const room = findRoomByInviteCode(inviteCode);
   if (!room) {
     return res.status(404).json({ error: 'Invalid invite code' });
@@ -140,7 +182,7 @@ router.get('/:roomId/messages', (req, res) => {
 
   const all   = parseHistory(fs.readFileSync(historyPath, 'utf8'));
   const limit = Math.min(parseInt(req.query.limit || '100', 10), 200);
-  const skip  = Math.max(parseInt(req.query.skip  || '0',   10), 0);
+  const skip  = Math.min(Math.max(parseInt(req.query.skip || '0', 10), 0), 100000);
   const total = all.length;
 
   const end      = total - skip;
@@ -152,6 +194,14 @@ router.get('/:roomId/messages', (req, res) => {
 
 // POST /api/rooms/:roomId/archive  — Owner archives history and starts fresh
 router.post('/:roomId/archive', (req, res) => {
+  const { inviteCode, username } = getAuthHeaders(req);
+  if (!verifyInviteCode(req.params.roomId, inviteCode)) {
+    return res.status(403).json({ error: 'Invalid invite code' });
+  }
+  if (!verifyOwner(req.params.roomId, username)) {
+    return res.status(403).json({ error: 'Only the room owner can archive history' });
+  }
+
   const roomPath    = getRoomPath(req.params.roomId);
   const historyPath = path.join(roomPath, 'history.md');
 
@@ -230,14 +280,25 @@ router.get('/:roomId/settings', (req, res) => {
 
 // PATCH /api/rooms/:roomId/settings
 router.patch('/:roomId/settings', (req, res) => {
+  const { inviteCode, username } = getAuthHeaders(req);
+  if (!verifyInviteCode(req.params.roomId, inviteCode)) {
+    return res.status(403).json({ error: 'Invalid invite code' });
+  }
+  if (!verifyOwner(req.params.roomId, username)) {
+    return res.status(403).json({ error: 'Only the room owner can change settings' });
+  }
+
   const settingsPath = path.join(getRoomPath(req.params.roomId), 'settings.json');
   if (!fs.existsSync(settingsPath)) {
     return res.status(404).json({ error: 'Room not found' });
   }
   const current = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-  const updated = { ...current, ...req.body };
-  fs.writeFileSync(settingsPath, JSON.stringify(updated, null, 2));
-  res.json(updated);
+  // Only allow updating friction values — prevent arbitrary field overwrites
+  if (req.body.friction && typeof req.body.friction === 'object') {
+    current.friction = { ...current.friction, ...req.body.friction };
+  }
+  fs.writeFileSync(settingsPath, JSON.stringify(current, null, 2));
+  res.json(current);
 });
 
 // GET /api/rooms/:roomId/context
@@ -251,11 +312,24 @@ router.get('/:roomId/context', (req, res) => {
 
 // PUT /api/rooms/:roomId/context
 router.put('/:roomId/context', (req, res) => {
+  const { inviteCode, username } = getAuthHeaders(req);
+  if (!verifyInviteCode(req.params.roomId, inviteCode)) {
+    return res.status(403).json({ error: 'Invalid invite code' });
+  }
+  if (!verifyOwner(req.params.roomId, username)) {
+    return res.status(403).json({ error: 'Only the room owner can edit context' });
+  }
+
   const contextPath = path.join(getRoomPath(req.params.roomId), 'context.md');
   if (!fs.existsSync(contextPath)) {
     return res.status(404).json({ error: 'Room not found' });
   }
-  fs.writeFileSync(contextPath, req.body.content || '');
+
+  const content = String(req.body.content || '');
+  if (content.length > 50000) {
+    return res.status(413).json({ error: 'Context too large (max 50 KB)' });
+  }
+  fs.writeFileSync(contextPath, content);
   res.json({ ok: true });
 });
 
@@ -266,9 +340,17 @@ router.get('/:roomId/members', (req, res) => {
   res.json(parseMembers(fs.readFileSync(membersPath, 'utf8')));
 });
 
-// DELETE /api/rooms/:roomId/members/:username  — kick a member
+// DELETE /api/rooms/:roomId/members/:username  — kick a member (Owner only)
 router.delete('/:roomId/members/:username', (req, res) => {
   const { roomId, username } = req.params;
+  const { inviteCode, username: requester } = getAuthHeaders(req);
+  if (!verifyInviteCode(roomId, inviteCode)) {
+    return res.status(403).json({ error: 'Invalid invite code' });
+  }
+  if (!verifyOwner(roomId, requester)) {
+    return res.status(403).json({ error: 'Only the room owner can kick members' });
+  }
+
   const membersPath = path.join(getRoomPath(roomId), 'members.md');
   if (!fs.existsSync(membersPath)) return res.status(404).json({ error: 'Room not found' });
 

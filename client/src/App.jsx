@@ -131,8 +131,8 @@ export default function App() {
       .catch(console.error);
   }, [session?.roomId]);
 
-  function handleJoin({ roomId, roomName, username, role }) {
-    const s = { roomId, roomName, username, role };
+  function handleJoin({ roomId, roomName, username, role, inviteCode }) {
+    const s = { roomId, roomName, username, role, inviteCode };
     setSession(s);
     saveSession(s);
     socket.emit('join_room', { roomId, username });

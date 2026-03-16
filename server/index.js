@@ -3,7 +3,16 @@ const express = require('express');
 const http    = require('http');
 const { Server } = require('socket.io');
 const path    = require('path');
+const fs      = require('fs');
 const helmet  = require('helmet');
+
+const ROOMS_DIR = path.join(__dirname, 'rooms');
+
+function getRoomOwner(roomId) {
+  const settingsPath = path.join(ROOMS_DIR, roomId, 'settings.json');
+  if (!fs.existsSync(settingsPath)) return null;
+  try { return JSON.parse(fs.readFileSync(settingsPath, 'utf8')).owner || null; } catch { return null; }
+}
 
 const roomsRouter = require('./routes/rooms');
 const filesRouter = require('./routes/files');
@@ -45,7 +54,7 @@ app.use(helmet({
     }
   }
 }));
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 app.use(express.static(path.join(__dirname, '../client/dist')));
 
 // ─── REST Routes ─────────────────────────────────────────────────────────────
@@ -85,32 +94,54 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_message', async (payload) => {
+    const roomId   = socket.data.roomId;
+    const username = socket.data.username;
+    if (!roomId || !username) return;
+    if (typeof payload.text !== 'string' || payload.text.length > 32000) return;
+
     // Broadcast human message to room immediately
-    io.to(payload.roomId).emit('new_message', payload);
+    const safePayload = { ...payload, roomId, username };
+    io.to(roomId).emit('new_message', safePayload);
 
     // Check for @mention and route to model if found
-    await handleMessage(payload, io);
+    await handleMessage(safePayload, io);
   });
 
-  socket.on('friction_change', ({ roomId, model, value, username }) => {
+  socket.on('friction_change', ({ model, value }) => {
+    const roomId   = socket.data.roomId;
+    const username = socket.data.username;
+    if (!roomId || !username) return;
     io.to(roomId).emit('system_message', {
       text: `${model} friction set to ${value} by ${username}`
     });
   });
 
-  socket.on('stop_model', ({ roomId, model }) => {
+  socket.on('stop_model', ({ model }) => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
     stopModel(roomId, model);
   });
 
-  socket.on('clear_messages', ({ roomId, username }) => {
+  socket.on('clear_messages', () => {
+    const roomId   = socket.data.roomId;
+    const username = socket.data.username;
+    if (!roomId || !username) return;
     io.to(roomId).emit('messages_cleared', { username });
   });
 
-  socket.on('kick_member', ({ roomId, targetUsername }) => {
+  socket.on('kick_member', ({ targetUsername }) => {
+    const roomId   = socket.data.roomId;
+    const requester = socket.data.username;
+    if (!roomId || !requester) return;
+
+    // Only the room owner may kick
+    const owner = getRoomOwner(roomId);
+    if (!owner || requester !== owner) return;
+
     // Find target's socket(s) and emit kicked event
-    for (const [id, s] of io.sockets.sockets) {
+    for (const [, s] of io.sockets.sockets) {
       if (s.data.roomId === roomId && s.data.username === targetUsername) {
-        s.emit('kicked', { by: socket.data.username });
+        s.emit('kicked', { by: requester });
         s.leave(roomId);
       }
     }
@@ -119,7 +150,10 @@ io.on('connection', (socket) => {
     emitPresence(roomId);
   });
 
-  socket.on('member_joined', ({ roomId, username }) => {
+  socket.on('member_joined', () => {
+    const roomId   = socket.data.roomId;
+    const username = socket.data.username;
+    if (!roomId || !username) return;
     io.to(roomId).emit('member_joined', { username });
   });
 

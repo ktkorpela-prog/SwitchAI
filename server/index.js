@@ -29,10 +29,10 @@ const PORT = process.env.PORT || 3000;
 // Helmet sets X-Frame-Options, X-Content-Type-Options, HSTS, etc.
 // contentSecurityPolicy is relaxed to allow the inline styles Tailwind needs.
 app.use(helmet({
-  // Disable HSTS — this is a local/LAN app served over HTTP, not HTTPS.
-  // HSTS on an HTTP server causes browsers to refuse future HTTP connections.
-  strictTransportSecurity: false,
+  strictTransportSecurity:  false, // LAN HTTP app — HSTS would break access
+  crossOriginOpenerPolicy:  false, // Avoid COOP warnings on plain HTTP origins
   contentSecurityPolicy: {
+    useDefaults: false,            // Don't include upgrade-insecure-requests
     directives: {
       defaultSrc:  ["'self'"],
       scriptSrc:   ["'self'"],

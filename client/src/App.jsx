@@ -35,6 +35,7 @@ function clearSession() {
 export default function App() {
   const [session, setSession]           = useState(loadSession);
   const [messages, setMessages]         = useState([]);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [typingModels, setTypingModels] = useState([]);
   const [connected, setConnected]       = useState(true);
   const [reconnecting, setReconnecting] = useState(false);
@@ -100,6 +101,7 @@ export default function App() {
 
     socket.on('messages_cleared', ({ username }) => {
       setMessages([{ type: 'system', text: `${username} cleared the chat view`, id: Date.now() }]);
+      setHasMoreHistory(false);
     });
 
     socket.on('model_error', ({ model, error }) => {
@@ -122,12 +124,15 @@ export default function App() {
     socket.emit('join_room', { roomId: session.roomId, username: session.username });
     fetch(`/api/rooms/${session.roomId}/messages`)
       .then((r) => r.json())
-      .then((history) => setMessages(history))
+      .then(({ messages, hasMore }) => {
+        setMessages(messages);
+        setHasMoreHistory(hasMore);
+      })
       .catch(console.error);
   }, [session?.roomId]);
 
-  function handleJoin({ roomId, roomName, username, role }) {
-    const s = { roomId, roomName, username, role };
+  function handleJoin({ roomId, roomName, username, role, inviteCode }) {
+    const s = { roomId, roomName, username, role, inviteCode };
     setSession(s);
     saveSession(s);
     socket.emit('join_room', { roomId, username });
@@ -145,6 +150,16 @@ export default function App() {
 
   function clearMessages() {
     socket.emit('clear_messages', { roomId: session.roomId, username: session.username });
+  }
+
+  function loadOlderMessages() {
+    fetch(`/api/rooms/${session.roomId}/messages?skip=${messages.length}`)
+      .then((r) => r.json())
+      .then(({ messages: older, hasMore }) => {
+        setMessages((prev) => [...older, ...prev]);
+        setHasMoreHistory(hasMore);
+      })
+      .catch(console.error);
   }
 
   function sendMessage(text, replyTo) {
@@ -194,6 +209,8 @@ export default function App() {
         onSend={sendMessage}
         onStop={stopModel}
         onClear={clearMessages}
+        hasMoreHistory={hasMoreHistory}
+        onLoadOlder={loadOlderMessages}
       />
     </div>
   );

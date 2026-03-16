@@ -3,15 +3,29 @@ import Message from './Message';
 import InputBar from './InputBar';
 import TypingIndicator from './TypingIndicator';
 
-export default function ChatWindow({ messages, typingModels, session, onSend, onStop, onClear }) {
-  const bottomRef = useRef(null);
-  const dropZoneRef = useRef(null);
+export default function ChatWindow({ messages, typingModels, session, onSend, onStop, onClear, hasMoreHistory, onLoadOlder }) {
+  const bottomRef      = useRef(null);
+  const dropZoneRef    = useRef(null);
+  const scrollRef      = useRef(null);
+  const prevLengthRef  = useRef(0);
   const [replyTo, setReplyTo] = useState(null);
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, typingModels]);
+    const prev = prevLengthRef.current;
+    const curr = messages.length;
+    prevLengthRef.current = curr;
+
+    // Batch load (initial join or history clear) → jump instantly, no animation
+    // Single new message → smooth scroll
+    // Prepended older messages (curr > prev but scrolled up) → don't scroll
+    if (curr === 0) return;
+    if (prev === 0 || curr - prev > 1) {
+      bottomRef.current?.scrollIntoView({ behavior: 'instant' });
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   useEffect(() => {
     const el = dropZoneRef.current;
@@ -96,7 +110,25 @@ export default function ChatWindow({ messages, typingModels, session, onSend, on
       </div>
 
       {/* Thread */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+        {hasMoreHistory && (
+          <div className="flex justify-center pb-2">
+            <button
+              onClick={() => {
+                // Save scroll position so prepending messages doesn't jump the view
+                const el = scrollRef.current;
+                const distFromBottom = el ? el.scrollHeight - el.scrollTop : 0;
+                onLoadOlder();
+                requestAnimationFrame(() => {
+                  if (el) el.scrollTop = el.scrollHeight - distFromBottom;
+                });
+              }}
+              className="text-xs text-gray-500 hover:text-gray-300 border border-border rounded px-3 py-1 transition-colors"
+            >
+              Load older messages
+            </button>
+          </div>
+        )}
         {messages.map((msg, i) => (
           <Message
             key={msg.id || i}

@@ -44,6 +44,10 @@ function getFrictionModifier(level) {
  * }}
  */
 function buildContext(roomId, modelName, frictionLevel, contextMode, userMessage) {
+  if (!/^[a-z0-9-]+$/.test(roomId)) {
+    return { systemPrompt: '', messages: [], estimatedInputTokens: 0, tooLarge: true, debug: {} };
+  }
+
   const cfg   = getCfg();
   const debug = { mode: contextMode, layers: [], excluded: [], truncations: [] };
 

@@ -35,7 +35,7 @@ export default function Onboarding({ onJoin }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      onJoin({ roomId: data.roomId, roomName: data.roomName, username: form.username, role: data.role || 'Member' });
+      onJoin({ roomId: data.roomId, roomName: data.roomName, username: form.username, role: data.role || 'Member', inviteCode: form.inviteCode });
     } catch (err) {
       setError(err.message);
     }
@@ -83,7 +83,7 @@ export default function Onboarding({ onJoin }) {
 
           <button
             className={btnPrimary}
-            onClick={() => onJoin({ roomId: created.roomId, roomName: created.roomName, username: created.username, role: 'Owner' })}
+            onClick={() => onJoin({ roomId: created.roomId, roomName: created.roomName, username: created.username, role: 'Owner', inviteCode: created.inviteCode })}
           >
             Enter room →
           </button>

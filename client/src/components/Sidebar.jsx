@@ -45,8 +45,11 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
   }
 
   async function kickMember(username) {
-    await fetch(`/api/rooms/${session.roomId}/members/${encodeURIComponent(username)}`, { method: 'DELETE' });
-    socket.emit('kick_member', { roomId: session.roomId, targetUsername: username });
+    await fetch(`/api/rooms/${session.roomId}/members/${encodeURIComponent(username)}`, {
+      method: 'DELETE',
+      headers: { 'X-Invite-Code': session.inviteCode || '', 'X-Username': session.username }
+    });
+    socket.emit('kick_member', { targetUsername: username });
     fetchMembers();
   }
 
@@ -75,6 +78,17 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
     setSettings(await settingsRes.json());
   }
 
+  async function archiveHistory() {
+    if (!window.confirm('Archive the chat history and start fresh? The archive is kept on the server.')) return;
+    const res = await fetch(`/api/rooms/${session.roomId}/archive`, {
+      method: 'POST',
+      headers: { 'X-Invite-Code': session.inviteCode || '', 'X-Username': session.username }
+    });
+    if (res.ok) {
+      socket.emit('clear_messages');
+    }
+  }
+
   async function openContextEditor() {
     const res = await fetch(`/api/rooms/${session.roomId}/context`);
     const text = await res.text();
@@ -86,7 +100,11 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
     setContextSaving(true);
     await fetch(`/api/rooms/${session.roomId}/context`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Invite-Code': session.inviteCode || '',
+        'X-Username': session.username
+      },
       body: JSON.stringify({ content: contextText })
     });
     setContextSaving(false);
@@ -102,10 +120,14 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
     setSettings(updated);
     await fetch(`/api/rooms/${session.roomId}/settings`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Invite-Code': session.inviteCode || '',
+        'X-Username': session.username
+      },
       body: JSON.stringify({ friction: updated.friction })
     });
-    socket.emit('friction_change', { roomId: session.roomId, model, value, username: session.username });
+    socket.emit('friction_change', { model, value });
   }
 
   const isOwner = session.role === 'Owner';
@@ -237,6 +259,22 @@ export default function Sidebar({ session, socket, isDark, onToggleTheme, onLeav
             Leave room
           </button>
         </div>
+
+        {/* Archive history button — Owner only */}
+        {isOwner && (
+          <div className="px-4 pt-2">
+            <button
+              onClick={archiveHistory}
+              className="w-full text-left text-xs text-gray-400 hover:text-yellow-400 flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+              Archive history
+            </button>
+          </div>
+        )}
 
         {/* Context editor button */}
         {isOwner && (

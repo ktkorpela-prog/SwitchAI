@@ -102,3 +102,35 @@
 
 - [ ] Investigate "Leave room" button — Karina unable to exit room and return to onboarding page
 - [ ] Replace exposed OpenAI API key — revoke at platform.openai.com/api-keys
+
+---
+
+## Security Fixes — Second Audit (13 total, commit d166aba)
+
+Second comprehensive audit covered all legacy code plus everything added in this session.
+
+| # | Severity | Issue | Fix | File(s) |
+|---|----------|-------|-----|---------|
+| 1 | Critical | `send_message` used untrusted `payload.roomId/username` — attacker could post to any room or impersonate anyone | Overwrite with `socket.data.roomId/username`; validate text is string ≤ 32,000 chars | `server/index.js` |
+| 2 | Critical | `friction_change`, `stop_model`, `clear_messages` used untrusted `payload.roomId` | Use `socket.data.roomId` in all three handlers | `server/index.js` |
+| 3 | Critical | `kick_member` had no owner authorization — any socket could kick any user | Read `settings.json` owner; reject if requester ≠ owner | `server/index.js` |
+| 4 | Critical | `PATCH /settings` had no auth — anyone could change friction or overwrite `owner` | Require `X-Invite-Code` + `X-Username` headers; restrict writable fields to `friction` only | `server/routes/rooms.js` |
+| 5 | Critical | `PUT /context` had no auth — anyone could overwrite room context | Require `X-Invite-Code` + `X-Username` (owner only) | `server/routes/rooms.js` |
+| 6 | Critical | `POST /archive` had no auth — anyone could archive any room | Require `X-Invite-Code` + `X-Username` (owner only) | `server/routes/rooms.js` |
+| 7 | Critical | `DELETE /members/:username` had no auth — anyone could kick members via REST | Require `X-Invite-Code` + `X-Username` (owner only) | `server/routes/rooms.js` |
+| 8 | High | `ROOM_SECRET` comparison used `!==` — vulnerable to timing attack | Switched to `crypto.timingSafeEqual` | `server/routes/rooms.js` |
+| 9 | High | No JSON body size limit — could be used for memory exhaustion | `express.json({ limit: '10kb' })` | `server/index.js` |
+| 10 | High | No rate limit on `POST /api/keys/:model` — API keys could be brute-forced or flooded | `express-rate-limit` added (20 req / 15 min / IP) | `server/routes/keys.js` |
+| 11 | Medium | Invite code format not validated — could accept malformed codes | Regex `/^[a-zA-Z0-9_-]{4,64}$/` enforced on create and join | `server/routes/rooms.js` |
+| 12 | Medium | `context.md` write had no size cap — could fill disk | 50 KB limit enforced; returns HTTP 413 if exceeded | `server/routes/rooms.js` |
+| 13 | Medium | Pagination `skip` param had no upper bound | Capped at 100,000; `contextBuilder` validates `roomId` format before file access | `server/routes/rooms.js`, `server/contextBuilder.js` |
+
+### Client changes required by auth fixes
+
+| File | Change |
+|------|--------|
+| `client/src/App.jsx` | `inviteCode` now stored in localStorage session |
+| `client/src/components/Onboarding.jsx` | `inviteCode` passed to `onJoin` callback on both create and join flows |
+| `client/src/components/Sidebar.jsx` | All write requests send `X-Invite-Code` and `X-Username` headers; socket `kick_member`, `friction_change`, and `clear_messages` events no longer include `roomId` (server ignores it now) |
+
+> **Note:** Users with an existing session in localStorage will need to leave and rejoin once. Sessions created before this commit do not store `inviteCode`, so write actions (friction, context, archive, kick) will return 403 until the session is refreshed.
